@@ -43,7 +43,7 @@ export default function CompleteProfile() {
     setError(null);
 
     try {
-      const isAdminEmail = user.email === 'f1b02310096@student.unram.ac.id';
+      const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(user.email || '');
       await setDoc(doc(db, 'users', user.uid), {
         name,
         nip,

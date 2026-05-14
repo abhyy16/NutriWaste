@@ -14,7 +14,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (getUserData().role == 'admin' || request.auth.token.email == 'f1b02310096@student.unram.ac.id');
+      return isSignedIn() && (getUserData().role == 'admin' || request.auth.token.email in ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com']);
     }
 
     function isNutritionist() {

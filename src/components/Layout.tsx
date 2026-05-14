@@ -17,13 +17,76 @@ export default function Layout() {
     navigate('/login');
   };
 
-  const isAdmin = profile?.role === 'admin' || auth.currentUser?.email === 'f1b02310096@student.unram.ac.id';
+  const isAdmin = profile?.role === 'admin' || ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(auth.currentUser?.email || '');
 
   const navItems = [
     { name: 'Dashboard Utama', path: '/', icon: LayoutDashboard },
     { name: 'Input Sisa Makan', path: '/record', icon: PlusCircle },
     ...(isAdmin ? [{ name: 'Data Master', path: '/master', icon: Database }] : []),
   ];
+
+  const SidebarContent = ({ isMobile = false }) => (
+    <>
+      {!isMobile && (
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-100">N</div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Nutriwaste</h1>
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Digital Nutrition</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <nav className={`flex-1 p-4 ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = location.pathname === item.path;
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              onClick={() => isMobile && setIsMenuOpen(false)}
+              className={`
+                flex items-center gap-3 px-4 py-3 rounded-xl transition-all
+                ${isActive 
+                  ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm shadow-emerald-50' 
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}
+                ${isMobile ? 'text-base py-4' : 'text-sm'}
+              `}
+            >
+              <Icon size={isMobile ? 22 : 20} strokeWidth={isActive ? 2.5 : 2} />
+              <span>{item.name}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+        <Link 
+          to="/profile"
+          onClick={() => isMobile && setIsMenuOpen(false)}
+          className="flex items-center gap-3 px-3 py-2 mb-3 bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-200 hover:ring-2 hover:ring-emerald-50 transition-all group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold group-hover:bg-emerald-600 group-hover:text-white transition-colors flex-shrink-0">
+            {profile?.name.charAt(0)}
+          </div>
+          <div className="flex-1 overflow-hidden text-left">
+            <p className="text-sm font-bold text-slate-800 truncate leading-tight">{profile?.name}</p>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter truncate">{profile?.role}</p>
+          </div>
+        </Link>
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
+        >
+          <LogOut size={16} />
+          <span>Logout Session</span>
+        </button>
+      </div>
+    </>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
@@ -34,7 +97,6 @@ export default function Layout() {
           <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Nutriwaste</h1>
         </div>
         <button 
-          id="mobile-menu-btn"
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           className="p-2 text-slate-600"
         >
@@ -42,87 +104,43 @@ export default function Layout() {
         </button>
       </header>
 
-      {/* Sidebar (Desktop) / Drawer (Mobile) */}
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex sticky top-0 h-screen w-64 bg-white border-r border-slate-200 flex-col z-40">
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile Drawer */}
       <AnimatePresence>
-        {(isMenuOpen || window.innerWidth >= 768) && (
-          <motion.aside
-            initial={{ x: -300 }}
-            animate={{ x: 0 }}
-            exit={{ x: -300 }}
-            className={`
-              fixed md:sticky top-0 left-0 h-screen w-64 bg-white border-r border-slate-200 z-40 
-              flex flex-col transform md:translate-x-0 transition-transform duration-200 ease-in-out
-              shadow-xl md:shadow-none
-              ${isMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-            `}
-          >
-            <div className="p-6 hidden md:block">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-100">N</div>
-                <div>
-                  <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Nutriwaste</h1>
-                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Digital Nutrition</span>
+        {isMenuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMenuOpen(false)}
+              className="fixed inset-0 bg-slate-900/60 z-[60] md:hidden backdrop-blur-sm"
+            />
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed top-0 left-0 h-full w-[280px] bg-white z-[70] flex flex-col shadow-2xl md:hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-xl">N</div>
+                  <h1 className="text-xl font-bold text-slate-800">Nutriwaste</h1>
                 </div>
+                <button onClick={() => setIsMenuOpen(false)} className="p-2 text-slate-400">
+                  <X size={24} />
+                </button>
               </div>
-            </div>
-
-            <nav className="flex-1 p-4 space-y-1">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = location.pathname === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setIsMenuOpen(false)}
-                    className={`
-                      flex items-center gap-3 px-4 py-3 rounded-xl transition-all
-                      ${isActive 
-                        ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm shadow-emerald-50' 
-                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}
-                    `}
-                  >
-                    <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                    <span className="text-sm">{item.name}</span>
-                  </Link>
-                );
-              })}
-            </nav>
-
-            <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-              <Link 
-                to="/profile"
-                onClick={() => setIsMenuOpen(false)}
-                className="flex items-center gap-3 px-3 py-2 mb-3 bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-200 hover:ring-2 hover:ring-emerald-50 transition-all group"
-              >
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                  {profile?.name.charAt(0)}
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <p className="text-sm font-bold text-slate-800 truncate leading-tight">{profile?.name}</p>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter truncate">{profile?.role}</p>
-                </div>
-              </Link>
-              <button
-                id="logout-btn"
-                onClick={handleLogout}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
-              >
-                <LogOut size={16} />
-                <span>Logout Session</span>
-              </button>
-            </div>
-          </motion.aside>
+              <SidebarContent isMobile />
+            </motion.aside>
+          </>
         )}
       </AnimatePresence>
-
-      {/* Backdrop for mobile menu */}
-      {isMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/50 z-30 md:hidden"
-          onClick={() => setIsMenuOpen(false)}
-        />
-      )}
 
       {/* Main Content */}
       <main className="flex-1 p-4 md:p-8 lg:p-12 max-w-7xl mx-auto w-full">

@@ -55,6 +55,41 @@ export default function MasterData() {
     }
   };
 
+  const seedDefaults = async () => {
+    if (!confirm('Gunakan data standar sebagai awal? Ini akan menambahkan beberapa jenis diet dan bangsal umum.')) return;
+    setIsSubmitting(true);
+    try {
+      const defaultDiets = [
+        { name: 'Makanan Biasa', standardWeight: 450, dietType: 'Biasa', cycleDay: 1 },
+        { name: 'Bubur Lunak', standardWeight: 400, dietType: 'Lunak', cycleDay: 1 },
+        { name: 'Bubur Saring', standardWeight: 300, dietType: 'Saring', cycleDay: 1 },
+        { name: 'Diet Rendah Garam', standardWeight: 400, dietType: 'RG', cycleDay: 1 },
+        { name: 'Diet Diabetes Melitus', standardWeight: 350, dietType: 'DM', cycleDay: 1 },
+        { name: 'Diet Jantung', standardWeight: 350, dietType: 'Jantung', cycleDay: 1 }
+      ];
+      
+      const defaultWards = ['Bangsal Mawar', 'Bangsal Melati', 'Bangsal Anggrek', 'ICU', 'IGD'];
+
+      // Only add if lists are empty or user confirmed. 
+      // To keep it simple, we just add them.
+      for (const diet of defaultDiets) {
+        await addDoc(collection(db, 'menus'), { ...diet, createdAt: serverTimestamp() });
+      }
+      
+      for (const w of defaultWards) {
+        await addDoc(collection(db, 'wards'), { name: w, createdAt: serverTimestamp() });
+      }
+
+      notify('success', 'Data standar berhasil ditambahkan');
+      fetchData();
+    } catch (error) {
+      notify('error', 'Gagal menambahkan data standar');
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -124,7 +159,7 @@ export default function MasterData() {
           <h2 className="text-3xl font-bold text-slate-900">Data Master</h2>
           <p className="text-slate-500">Kelola database jenis diet dan unit/bangsal rumah sakit</p>
         </div>
-        <div className="flex bg-slate-200/50 p-1 rounded-xl w-fit">
+        <div className="flex bg-slate-200/50 p-1 rounded-xl w-fit items-center gap-2">
           <button
             onClick={() => setActiveTab('menus')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'menus' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
@@ -137,6 +172,15 @@ export default function MasterData() {
           >
             Unit / Bangsal
           </button>
+          {(menus.length === 0 && wards.length === 0) && (
+            <button
+              onClick={seedDefaults}
+              className="ml-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center gap-1.5"
+            >
+              <Database size={14} />
+              Gunakan Contoh
+            </button>
+          )}
         </div>
       </div>
 
@@ -203,14 +247,25 @@ export default function MasterData() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Jenis Diet</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Kategori Diet</label>
                 <input
                   type="text"
+                  list="diet-options"
                   value={dietType}
                   onChange={(e) => setDietType(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
-                  placeholder="Contoh: Diet Rendah Garam"
+                  placeholder="Contoh: Biasa, Lunak, RG, DM"
                 />
+                <datalist id="diet-options">
+                  <option value="Biasa" />
+                  <option value="Lunak" />
+                  <option value="Saring" />
+                  <option value="Rendah Garam (RG)" />
+                  <option value="Diabetes Melitus (DM)" />
+                  <option value="Rendah Kalori" />
+                  <option value="Tinggi Protein" />
+                  <option value="Jantung" />
+                </datalist>
               </div>
               <button
                 type="submit"
