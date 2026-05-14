@@ -144,7 +144,7 @@ export default function Reports() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         <div className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-4">
           <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl">
             <HardDrive size={24} />
@@ -155,22 +155,22 @@ export default function Reports() {
           </div>
         </div>
 
-        <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-3">
+        <div className="md:col-span-2 grid grid-cols-2 gap-3 items-center">
            <button 
              onClick={exportToExcel}
              disabled={transactions.length === 0}
-             className="flex items-center gap-3 px-6 py-4 bg-white border border-emerald-200 text-emerald-700 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-lg shadow-emerald-100/50 disabled:opacity-50 disabled:shadow-none"
+             className="flex items-center justify-center gap-2 px-4 py-4 bg-white border border-emerald-200 text-emerald-700 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-lg shadow-emerald-100/50 disabled:opacity-50 disabled:shadow-none text-xs sm:text-base"
            >
-             <FileDown size={20} />
-             Excel (.xlsx)
+             <FileDown size={18} />
+             <span>Excel</span>
            </button>
            <button 
              onClick={exportToPDF}
              disabled={transactions.length === 0}
-             className="flex items-center gap-3 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50 disabled:shadow-none"
+             className="flex items-center justify-center gap-2 px-4 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50 disabled:shadow-none text-xs sm:text-base"
            >
-             <FileDown size={20} />
-             PDF (.pdf)
+             <FileDown size={18} />
+             <span>PDF</span>
            </button>
         </div>
       </div>

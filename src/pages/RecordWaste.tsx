@@ -224,8 +224,8 @@ export default function RecordWaste() {
               </div>
 
               <div className="space-y-4">
-                <div className="grid grid-cols-6 gap-4">
-                  <div className="col-span-3 space-y-1">
+                <div className="grid grid-cols-1 sm:grid-cols-6 gap-4">
+                  <div className="sm:col-span-3 space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nama Pasien</label>
                     <input
                       type="text"
@@ -235,34 +235,36 @@ export default function RecordWaste() {
                       className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 placeholder:font-normal placeholder:text-slate-300"
                     />
                   </div>
-                  <div className="col-span-1 space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Umur</label>
-                    <input
-                      type="number"
-                      value={patientAge}
-                      onChange={(e) => setPatientAge(e.target.value)}
-                      placeholder="Thn"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">JK</label>
-                    <div className="flex bg-slate-100 p-1 rounded-2xl h-[58px]">
-                      {(['L', 'P'] as const).map(g => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setPatientGender(g)}
-                          className={`flex-1 flex items-center justify-center text-xs font-black rounded-xl transition-all ${patientGender === g ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
-                        >
-                          {g === 'L' ? 'LAKI' : 'PEREMPUAN'}
-                        </button>
-                      ))}
+                  <div className="grid grid-cols-3 sm:grid-cols-3 sm:col-span-3 gap-4">
+                    <div className="col-span-1 space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Umur</label>
+                      <input
+                        type="number"
+                        value={patientAge}
+                        onChange={(e) => setPatientAge(e.target.value)}
+                        placeholder="Thn"
+                        className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
+                      />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">JK</label>
+                      <div className="flex bg-slate-100 p-1 rounded-2xl h-[58px]">
+                        {(['L', 'P'] as const).map(g => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setPatientGender(g)}
+                            className={`flex-1 flex items-center justify-center text-xs font-black rounded-xl transition-all ${patientGender === g ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                          >
+                            {g === 'L' ? 'LAKI' : 'PEREMPUAN'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Unit / Ruangan</label>
                     <select 
@@ -286,7 +288,7 @@ export default function RecordWaste() {
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">No. Kamar</label>
                     <input
@@ -471,7 +473,7 @@ export default function RecordWaste() {
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
-            className="fixed bottom-8 left-4 right-4 md:left-auto md:right-8 bg-emerald-600 text-white p-6 rounded-[2rem] shadow-2xl flex items-center gap-4 z-50 md:max-w-sm"
+            className="fixed bottom-28 left-4 right-4 md:left-auto md:right-8 bg-emerald-600 text-white p-6 rounded-[2rem] shadow-2xl flex items-center gap-4 z-50 md:max-w-sm"
           >
             <div className="bg-white/20 p-2 rounded-full">
               <CheckCircle2 size={32} />

@@ -244,30 +244,30 @@ export default function Dashboard() {
       </header>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <StatCard 
-          title="Rata-rata Waste" 
-          value={`${avgWaste.toFixed(1)}%`} 
-          subText="Target: < 20%" 
+          title="Avg Waste" 
+          value={`${avgWaste.toFixed(0)}%`} 
+          subText="Target: <20%" 
           icon={TrendingUp} 
           trend={avgWaste > 20 ? 'bad' : 'good'}
         />
         <StatCard 
-          title="Total Rekam Data" 
+          title="Records" 
           value={transactions.length} 
-          subText="30 Hari Terakhir" 
+          subText="30 Days" 
           icon={Utensils} 
         />
         <StatCard 
-          title="Pasien Terpantau" 
+          title="Patients" 
           value={totalPatients} 
-          subText="Sensus Aktif" 
+          subText="Sensus" 
           icon={Users} 
         />
         <StatCard 
-          title="Peringatan Kritis" 
+          title="Alerts" 
           value={menuWastes.length} 
-          subText="Jenis Diet Waste Tinggi" 
+          subText="Critical" 
           icon={AlertTriangle} 
           trend={menuWastes.length > 0 ? 'bad' : 'neutral'}
         />
@@ -539,7 +539,7 @@ export default function Dashboard() {
                 </div>
 
                 <form onSubmit={handleUpdate} className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-400 uppercase">Nama Pasien</label>
                         <input 
