@@ -6,6 +6,7 @@ export interface UserProfile {
   nip: string;
   email: string;
   role: Role;
+  photoURL?: string;
   assignedWardId?: string; // Session ward
   createdAt: any;
 }
@@ -29,13 +30,20 @@ export interface Transaction {
   id: string;
   patientName: string;
   patientAge: number;
+  patientGender: 'L' | 'P';
   wardId: string;
+  roomNumber?: string;
+  bedNumber?: string;
+  staffInCharge?: string; // New field as requested
+  dietType?: string;      // New field as requested
   mealTime: MealTime;
   menuId: string;
   comstockScale: number; // 0-6
   wasteWeight: number;
   consumptionWeight: number;
+  reason?: string;
   staffId: string;
+  staffName?: string;
   timestamp: any;
 }
 

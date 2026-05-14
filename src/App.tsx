@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import RecordWaste from './pages/RecordWaste';
 import MasterData from './pages/MasterData';
 import Profile from './pages/Profile';
+import Reports from './pages/Reports';
 import Layout from './components/Layout';
 
 export default function App() {
@@ -35,7 +36,8 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="record" element={<RecordWaste />} />
-          <Route path="master" element={profile?.role === 'admin' ? <MasterData /> : <Navigate to="/" />} />
+          <Route path="master" element={(profile?.role === 'admin' || ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(user?.email || '')) ? <MasterData /> : <Navigate to="/" />} />
+          <Route path="reports" element={(profile?.role === 'admin' || ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(user?.email || '')) ? <Reports /> : <Navigate to="/" />} />
           <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>

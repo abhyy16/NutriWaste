@@ -42,12 +42,14 @@
       "properties": {
         "patientName": { "type": "string" },
         "patientAge": { "type": "number" },
+        "patientGender": { "type": "string", "enum": ["L", "P"] },
         "wardId": { "type": "string" },
         "mealTime": { "type": "string", "enum": ["B", "L", "D"] },
         "menuId": { "type": "string" },
         "comstockScale": { "type": "number", "enum": [0, 1, 2, 3, 4, 5, 6] },
         "wasteWeight": { "type": "number" },
         "consumptionWeight": { "type": "number" },
+        "reason": { "type": "string", "description": "Reason for food waste" },
         "staffId": { "type": "string" },
         "timestamp": { "type": "string", "format": "date-time" }
       },

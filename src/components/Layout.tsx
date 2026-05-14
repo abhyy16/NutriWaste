@@ -1,13 +1,13 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { auth } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X, FileText } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Layout() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -17,12 +17,15 @@ export default function Layout() {
     navigate('/login');
   };
 
-  const isAdmin = profile?.role === 'admin' || ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(auth.currentUser?.email || '');
+  const isAdmin = profile?.role === 'admin' || ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(user?.email || '');
 
   const navItems = [
     { name: 'Dashboard Utama', path: '/', icon: LayoutDashboard },
     { name: 'Input Sisa Makan', path: '/record', icon: PlusCircle },
-    ...(isAdmin ? [{ name: 'Data Master', path: '/master', icon: Database }] : []),
+    ...(isAdmin ? [
+      { name: 'Data Master', path: '/master', icon: Database },
+      { name: 'Laporan', path: '/reports', icon: FileText }
+    ] : []),
   ];
 
   const SidebarContent = ({ isMobile = false }) => (
@@ -69,8 +72,12 @@ export default function Layout() {
           onClick={() => isMobile && setIsMenuOpen(false)}
           className="flex items-center gap-3 px-3 py-2 mb-3 bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-200 hover:ring-2 hover:ring-emerald-50 transition-all group"
         >
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold group-hover:bg-emerald-600 group-hover:text-white transition-colors flex-shrink-0">
-            {profile?.name.charAt(0)}
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold group-hover:bg-emerald-600 group-hover:text-white transition-colors overflow-hidden flex-shrink-0">
+            {profile?.photoURL ? (
+              <img src={profile.photoURL} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              profile?.name.charAt(0)
+            )}
           </div>
           <div className="flex-1 overflow-hidden text-left">
             <p className="text-sm font-bold text-slate-800 truncate leading-tight">{profile?.name}</p>

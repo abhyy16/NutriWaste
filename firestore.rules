@@ -14,7 +14,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (getUserData().role == 'admin' || request.auth.token.email in ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com']);
+      return isSignedIn() && (
+        request.auth.token.email in ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'] ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
     }
 
     function isNutritionist() {
@@ -51,19 +54,20 @@ service cloud.firestore {
 
     function isValidTransaction(data) {
       return data.patientName is string && data.patientName.size() <= 100 &&
-             data.patientAge is int &&
+             data.patientAge is number &&
+             data.patientGender in ['L', 'P'] &&
              data.mealTime in ['B', 'L', 'D'] &&
-             data.comstockScale is int && data.comstockScale >= 0 && data.comstockScale <= 6 &&
+             data.comstockScale is number && data.comstockScale >= 0 && data.comstockScale <= 6 &&
+             (data.get('reason', null) == null || data.reason is string) &&
              data.staffId == request.auth.uid &&
-             data.staffName is string &&
+             (data.get('staffName', null) == null || data.staffName is string) &&
              data.timestamp == request.time;
     }
 
     match /transactions/{transactionId} {
-      allow list: if isSignedIn();
-      allow get: if isSignedIn();
+      allow list, get: if isSignedIn();
       allow create: if isSignedIn() && isValidTransaction(incoming());
-      allow update, delete: if isAdmin();
+      allow update, delete: if isSignedIn() && (resource.data.staffId == request.auth.uid || isAdmin());
     }
   }
 }

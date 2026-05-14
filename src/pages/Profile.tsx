@@ -1,28 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { doc, updateDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Fingerprint, Building2, AlertCircle, CheckCircle2, ArrowLeft, Save } from 'lucide-react';
+import { User, Fingerprint, Building2, AlertCircle, CheckCircle2, ArrowLeft, Save, Camera, LogOut } from 'lucide-react';
 import { Ward } from '../types';
 import { useNavigate } from 'react-router-dom';
+import { signOut } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 
 export default function Profile() {
   const { user, profile, refreshProfile } = useAuth();
   const [name, setName] = useState('');
   const [nip, setNip] = useState('');
   const [wardId, setWardId] = useState('');
+  const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [wards, setWards] = useState<Ward[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (profile) {
       setName(profile.name);
       setNip(profile.nip);
-      setWardId(profile.assignedWardId);
+      setWardId(profile.assignedWardId || '');
+      setPhotoURL(profile.photoURL || null);
+
+      // Auto-fix admin role if email is in the list
+      const adminEmails = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'];
+      if (adminEmails.includes(user?.email || '') && profile.role !== 'admin') {
+        const updateRole = async () => {
+          await updateDoc(doc(db, 'users', user!.uid), { role: 'admin' });
+          await refreshProfile?.();
+        };
+        updateRole();
+      }
     }
     
     const fetchWards = async () => {
@@ -31,7 +47,25 @@ export default function Profile() {
       setWards(snap.docs.map(d => ({ id: d.id, ...d.data() } as Ward)));
     };
     fetchWards();
-  }, [profile]);
+  }, [profile, user]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 500000) { // Limit to 500KB
+        setError('Ukuran file terlalu besar. Maksimal 500KB.');
+        return;
+      }
+
+      setIsUploading(true);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoURL(reader.result as string);
+        setIsUploading(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +84,7 @@ export default function Profile() {
         name,
         nip,
         assignedWardId: wardId,
+        photoURL: photoURL,
       });
       
       await refreshProfile?.();
@@ -63,16 +98,32 @@ export default function Profile() {
     }
   };
 
+  const handleLogout = async () => {
+    if (window.confirm('Keluar dari aplikasi?')) {
+      await signOut(auth);
+      navigate('/login');
+    }
+  };
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center gap-4 mb-2">
+    <div className="max-w-2xl mx-auto space-y-6 pb-20">
+      <div className="flex items-center justify-between gap-4 mb-2">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => navigate(-1)}
+            className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-all text-slate-500"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Profil Petugas</h2>
+        </div>
         <button 
-          onClick={() => navigate(-1)}
-          className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-all text-slate-500"
+          onClick={handleLogout}
+          className="flex items-center gap-2 px-4 py-2 text-red-500 font-bold text-xs uppercase tracking-widest hover:bg-red-50 rounded-xl transition-all"
         >
-          <ArrowLeft size={20} />
+          <LogOut size={16} />
+          Keluar
         </button>
-        <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Profil Petugas</h2>
       </div>
 
       <AnimatePresence>
@@ -89,10 +140,37 @@ export default function Profile() {
         )}
       </AnimatePresence>
 
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 p-8 md:p-10 shadow-sm">
+      <div className="bg-white rounded-[2.5rem] border border-slate-200 p-8 md:p-10 shadow-sm relative overflow-hidden">
         <div className="flex flex-col md:flex-row gap-8 items-start">
-          <div className="w-24 h-24 bg-slate-100 rounded-[2rem] flex items-center justify-center text-slate-300 relative group overflow-hidden">
-            <User size={48} />
+          <div className="relative group">
+            <div className="w-32 h-32 bg-slate-100 rounded-[2.5rem] flex items-center justify-center text-slate-300 overflow-hidden border-4 border-white shadow-xl">
+              {photoURL ? (
+                <img src={photoURL} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <User size={64} />
+              )}
+              {isUploading && (
+                <div className="absolute inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-white"></div>
+                </div>
+              )}
+            </div>
+            
+            <button 
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute -bottom-2 -right-2 p-3 bg-emerald-600 text-white rounded-2xl shadow-lg border-2 border-white hover:scale-110 transition-all active:scale-95"
+            >
+              <Camera size={20} />
+            </button>
+            
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*"
+              className="hidden"
+            />
           </div>
 
           <div className="flex-1 space-y-6 w-full">
@@ -158,8 +236,8 @@ export default function Profile() {
 
               <button
                 type="submit"
-                disabled={isLoading}
-                className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 mt-4"
+                disabled={isLoading || isUploading}
+                className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 mt-4 disabled:opacity-50"
               >
                 {isLoading ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
