@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application users (Admins or Nutritionists)",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "nip": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "nutritionist"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "nip", "email", "role"]
+    },
+    "Menu": {
+      "title": "Menu",
+      "description": "Master data for food menus",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "standardWeight": { "type": "number", "description": "Standard portion weight in grams" },
+        "dietType": { "type": "string" },
+        "cycleDay": { "type": "number" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["name", "standardWeight", "dietType"]
+    },
+    "Ward": {
+      "title": "Ward",
+      "description": "Hospital ward master data",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Plate waste recording entries",
+      "type": "object",
+      "properties": {
+        "patientName": { "type": "string" },
+        "patientAge": { "type": "number" },
+        "wardId": { "type": "string" },
+        "mealTime": { "type": "string", "enum": ["B", "L", "D"] },
+        "menuId": { "type": "string" },
+        "comstockScale": { "type": "number", "enum": [0, 1, 2, 3, 4, 5, 6] },
+        "wasteWeight": { "type": "number" },
+        "consumptionWeight": { "type": "number" },
+        "staffId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientName", "wardId", "menuId", "comstockScale", "staffId", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "menus/{menuId}": {
+      "schema": "Menu",
+      "description": "Food menu master data"
+    },
+    "wards/{wardId}": {
+      "schema": "Ward",
+      "description": "Ward master data"
+    },
+    "transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Plate waste records"
+    }
+  }
+}

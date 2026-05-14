@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getUserData().role == 'admin';
+    }
+
+    function isNutritionist() {
+      return isSignedIn() && (getUserData().role == 'nutritionist' || getUserData().role == 'admin');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Users ---
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      // Allow creation of first user if none exists (simplified for bootstrap) or if admin
+      allow create: if isSignedIn() && request.auth.uid == userId && (incoming().role == 'nutritionist'); 
+      // In production, you'd have a more robust first-admin setup
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId && !incoming().diff(existing()).affectedKeys().hasAny(['role']));
+    }
+
+    // --- Menus ---
+    match /menus/{menuId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // --- Wards ---
+    match /wards/{wardId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // --- Transactions ---
+    function isValidTransaction(data) {
+      return data.patientName is string && data.patientName.size() <= 100 &&
+             data.mealTime in ['B', 'L', 'D'] &&
+             data.comstockScale is int && data.comstockScale >= 0 && data.comstockScale <= 6 &&
+             data.staffId == request.auth.uid &&
+             data.timestamp == request.time;
+    }
+
+    match /transactions/{transactionId} {
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && isValidTransaction(incoming());
+      allow update: if isAdmin(); // Only admins can correct records
+      allow delete: if isAdmin();
+    }
+  }
+}

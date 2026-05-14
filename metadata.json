@@ -1,0 +1,6 @@
+{
+  "name": "Nutriwaste",
+  "description": "A digital plate waste monitoring application for hospitals to track patient food consumption using the Comstock scale.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

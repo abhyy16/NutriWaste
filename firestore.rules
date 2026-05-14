@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (getUserData().role == 'admin' || request.auth.token.email == 'f1b02310096@student.unram.ac.id');
+    }
+
+    function isNutritionist() {
+      return isSignedIn() && (getUserData().role == 'nutritionist' || isAdmin());
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId && !incoming().diff(existing()).affectedKeys().hasAny(['role']));
+    }
+
+    match /menus/{menuId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /wards/{wardId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    function isValidTransaction(data) {
+      return data.patientName is string && data.patientName.size() <= 100 &&
+             data.patientAge is int &&
+             data.mealTime in ['B', 'L', 'D'] &&
+             data.comstockScale is int && data.comstockScale >= 0 && data.comstockScale <= 6 &&
+             data.staffId == request.auth.uid &&
+             data.staffName is string &&
+             data.timestamp == request.time;
+    }
+
+    match /transactions/{transactionId} {
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && isValidTransaction(incoming());
+      allow update, delete: if isAdmin();
+    }
+  }
+}
