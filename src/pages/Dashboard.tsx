@@ -30,12 +30,11 @@ export default function Dashboard() {
     setLoading(true);
     let q = query(collection(db, 'transactions'));
     
-    // Filter by staffId if not admin
+    // Filter by staffId if not admin/nutritionist
     const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(profile?.email || '');
-    const isAdminRole = profile?.role === 'admin';
-    const isAdmin = isAdminEmail || isAdminRole;
+    const isAuthorized = profile?.role === 'admin' || profile?.role === 'nutritionist' || isAdminEmail;
 
-    if (!isAdmin && profile?.id) {
+    if (!isAuthorized && profile?.id) {
       q = query(q, where('staffId', '==', profile.id));
     }
 
@@ -457,7 +456,7 @@ export default function Dashboard() {
                 const ward = wards.find(w => w.id === t.wardId);
                 const isOwner = profile?.id === t.staffId;
                 const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(profile?.email || '');
-                const isAdmin = profile?.role === 'admin' || isAdminEmail;
+                const isAdmin = profile?.role === 'admin' || profile?.role === 'nutritionist' || isAdminEmail;
                return (
                  <div key={t.id} className="group flex items-center gap-4 p-4 border border-slate-50 rounded-2xl transition-colors hover:bg-slate-50">
                     <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold uppercase text-xs">

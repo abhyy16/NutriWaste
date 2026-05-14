@@ -22,9 +22,9 @@ export default function Layout() {
   const navItems = [
     { name: 'Dashboard Utama', path: '/', icon: LayoutDashboard },
     { name: 'Input Sisa Makan', path: '/record', icon: PlusCircle },
+    { name: 'Laporan', path: '/reports', icon: FileText },
     ...(isAdmin ? [
       { name: 'Data Master', path: '/master', icon: Database },
-      { name: 'Laporan', path: '/reports', icon: FileText }
     ] : []),
   ];
 
