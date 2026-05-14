@@ -43,17 +43,21 @@ export default function CompleteProfile() {
     setError(null);
 
     try {
+      const isAdminEmail = user.email === 'f1b02310096@student.unram.ac.id';
       await setDoc(doc(db, 'users', user.uid), {
         name,
         nip,
         email: user.email,
         assignedWardId: wardId,
-        role: 'nutritionist', // Default role
+        role: isAdminEmail ? 'admin' : 'nutritionist',
         createdAt: serverTimestamp(),
       });
       
       await refreshProfile?.();
-      navigate('/');
+      // Use a small delay or ensure state is actually updated before navigating
+      // if refreshProfile doesn't return a promise or if there's a race condition.
+      // But according to useAuth, refreshProfile returns the result of fetchProfile which is a promise.
+      setTimeout(() => navigate('/', { replace: true }), 100);
     } catch (err) {
       console.error('Gagal menyimpan profil:', err);
       setError('Gagal menyimpan data. Pastikan semua input sudah benar.');
@@ -111,7 +115,7 @@ export default function CompleteProfile() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px) font-bold text-slate-400 uppercase tracking-wider px-1">Unit/Bangsal Tugas</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Unit/Bangsal Tugas</label>
             <div className="relative">
               <select
                 value={wardId}

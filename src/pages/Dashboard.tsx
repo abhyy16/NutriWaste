@@ -138,7 +138,7 @@ export default function Dashboard() {
         <StatCard 
           title="Peringatan Kritis" 
           value={menuWastes.length} 
-          subText="Menu Waste Tinggi" 
+          subText="Jenis Diet Waste Tinggi" 
           icon={AlertTriangle} 
           trend={menuWastes.length > 0 ? 'bad' : 'neutral'}
         />
@@ -232,7 +232,7 @@ export default function Dashboard() {
              ))}
              {menuWastes.length === 0 && (
                <div className="text-center py-8 text-slate-400 italic">
-                 Tidak ada menu melebihi ambang batas. Kerja bagus!
+                 Tidak ada jenis diet melebihi ambang batas. Kerja bagus!
                </div>
              )}
            </div>

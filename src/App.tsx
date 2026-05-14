@@ -6,6 +6,7 @@ import CompleteProfile from './pages/CompleteProfile';
 import Dashboard from './pages/Dashboard';
 import RecordWaste from './pages/RecordWaste';
 import MasterData from './pages/MasterData';
+import Profile from './pages/Profile';
 import Layout from './components/Layout';
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="record" element={<RecordWaste />} />
           <Route path="master" element={profile?.role === 'admin' ? <MasterData /> : <Navigate to="/" />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>
     </Router>

@@ -47,3 +47,12 @@ export const COMSTOCK_VALUES = [
   { scale: 4, percentage: 95, label: '95% (Hampir Utuh)' },
   { scale: 5, percentage: 100, label: '100% (Utuh)' },
 ];
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}

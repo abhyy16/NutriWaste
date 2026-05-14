@@ -204,16 +204,16 @@ export default function RecordWaste() {
             <div className="bg-white p-6 rounded-[2rem] border border-slate-200 space-y-4 shadow-sm">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <UtensilsCrossed size={18} className="text-emerald-600" />
-                Menu yang Disajikan
+                Jenis Diet yang Disajikan
               </h3>
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Daftar Menu</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Jenis Diet</label>
                 <select 
                   value={menuId}
                   onChange={(e) => setMenuId(e.target.value)}
                   className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
                 >
-                  <option value="">-- Pilih Menu Hari Ini --</option>
+                  <option value="">-- Pilih Jenis Diet Hari Ini --</option>
                   {menus.map(m => (
                     <option key={m.id} value={m.id}>
                       {m.name} ({m.standardWeight}g)

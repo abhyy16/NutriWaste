@@ -8,8 +8,6 @@ import { AlertCircle, UserPlus, Fingerprint } from 'lucide-react';
 import { FirebaseError } from 'firebase/app';
 
 export default function Register() {
-  const [nip, setNip] = useState('');
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -22,37 +20,31 @@ export default function Register() {
     setError(null);
 
     // Form validation
-    if (!nip || !name || !email || !password) {
-      setError('Semua field harus diisi.');
+    if (!email || !password) {
+      setError('Email dan Kata Sandi harus diisi.');
       setIsLoading(false);
       return;
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // Create user profile in Firestore
-      // NIP is used here mainly as an identifier in the system
-      await setDoc(doc(db, 'users', user.uid), {
-        nip,
-        name,
-        email,
-        role: 'nutritionist', // Default role
-        createdAt: serverTimestamp(),
-      });
-
+      await createUserWithEmailAndPassword(auth, email, password);
+      // We don't create profile here anymore. 
+      // App.tsx and focus on CompleteProfile will handle mandatory profile setup.
       navigate('/');
     } catch (err) {
       console.error('Registrasi gagal:', err);
       if (err instanceof FirebaseError) {
         if (err.code === 'auth/email-already-in-use') {
-          setError('Email sudah terdaftar.');
+          setError('Email sudah terdaftar. Silakan gunakan menu Masuk untuk mengakses akun Anda.');
+        } else if (err.code === 'auth/weak-password') {
+          setError('Kata sandi terlalu lemah. Gunakan minimal 6 karakter.');
+        } else if (err.code === 'auth/invalid-email') {
+          setError('Format email tidak valid.');
         } else {
-          setError(err.message);
+          setError(`Gagal Daftar: ${err.message}`);
         }
       } else {
-        setError('Terjadi kesalahan yang tidak terduga.');
+        setError('Terjadi kesalahan yang tidak terduga saat mencoba mendaftar.');
       }
     } finally {
       setIsLoading(false);
@@ -83,39 +75,17 @@ export default function Register() {
 
         <form onSubmit={handleRegister} className="space-y-4">
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Nama Lengkap</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
-              placeholder="Contoh: Siti Aminah"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">NIP / Username</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Email</label>
             <div className="relative">
               <input
-                type="text"
-                value={nip}
-                onChange={(e) => setNip(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
-                placeholder="198765432109"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-11 pr-4 py-4 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
+                placeholder="siti@rsud.go.id"
               />
               <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
-              placeholder="siti@rsud.go.id"
-            />
           </div>
 
           <div className="space-y-1">
@@ -124,7 +94,7 @@ export default function Register() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
+              className="w-full px-4 py-4 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
               placeholder="••••••••"
             />
           </div>

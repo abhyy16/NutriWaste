@@ -17,10 +17,12 @@ export default function Layout() {
     navigate('/login');
   };
 
+  const isAdmin = profile?.role === 'admin' || auth.currentUser?.email === 'f1b02310096@student.unram.ac.id';
+
   const navItems = [
     { name: 'Dashboard Utama', path: '/', icon: LayoutDashboard },
     { name: 'Input Sisa Makan', path: '/record', icon: PlusCircle },
-    ...(profile?.role === 'admin' ? [{ name: 'Data Master', path: '/master', icon: Database }] : []),
+    ...(isAdmin ? [{ name: 'Data Master', path: '/master', icon: Database }] : []),
   ];
 
   return (
@@ -88,15 +90,19 @@ export default function Layout() {
             </nav>
 
             <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-              <div className="flex items-center gap-3 px-3 py-2 mb-3 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold">
+              <Link 
+                to="/profile"
+                onClick={() => setIsMenuOpen(false)}
+                className="flex items-center gap-3 px-3 py-2 mb-3 bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-200 hover:ring-2 hover:ring-emerald-50 transition-all group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                   {profile?.name.charAt(0)}
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <p className="text-sm font-bold text-slate-800 truncate leading-tight">{profile?.name}</p>
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter truncate">{profile?.role}</p>
                 </div>
-              </div>
+              </Link>
               <button
                 id="logout-btn"
                 onClick={handleLogout}
