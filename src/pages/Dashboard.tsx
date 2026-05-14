@@ -30,11 +30,8 @@ export default function Dashboard() {
     setLoading(true);
     let q = query(collection(db, 'transactions'));
     
-    // Filter by staffId if not admin/nutritionist
-    const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(profile?.email || '');
-    const isAuthorized = profile?.role === 'admin' || profile?.role === 'nutritionist' || isAdminEmail;
-
-    if (!isAuthorized && profile?.id) {
+    // Always filter by staffId to ensure user sees only their own data
+    if (profile?.id) {
       q = query(q, where('staffId', '==', profile.id));
     }
 

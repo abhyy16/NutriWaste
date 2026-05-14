@@ -26,6 +26,7 @@ export default function Reports() {
 
       let q = query(
         collection(db, 'transactions'), 
+        where('staffId', '==', profile?.id || ''),
         where('timestamp', '>=', start),
         where('timestamp', '<=', end)
       );

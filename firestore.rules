@@ -65,7 +65,8 @@ service cloud.firestore {
     }
 
     match /transactions/{transactionId} {
-      allow list, get: if isSignedIn();
+      allow list: if isSignedIn() && resource.data.staffId == request.auth.uid;
+      allow get: if isSignedIn() && (resource.data.staffId == request.auth.uid || isNutritionist());
       allow create: if isSignedIn() && isValidTransaction(incoming());
       allow update, delete: if isSignedIn() && (resource.data.staffId == request.auth.uid || isNutritionist());
     }
