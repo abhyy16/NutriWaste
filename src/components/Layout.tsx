@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { auth } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X, FileText } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X, FileText, User } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
@@ -150,9 +150,46 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-8 lg:p-12 max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-4 md:p-8 lg:p-12 pb-32 md:pb-8 lg:pb-12 max-w-7xl mx-auto w-full">
         <Outlet />
       </main>
+
+      {/* Bottom Navigation (Mobile Only) */}
+      <nav className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md bg-white/90 backdrop-blur-xl border border-slate-200 shadow-2xl shadow-emerald-900/10 rounded-[2.5rem] px-4 py-3 flex items-center justify-around z-50 transition-all">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = location.pathname === item.path;
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex flex-col items-center gap-1 transition-all flex-1 ${
+                isActive ? 'text-emerald-900 drop-shadow-sm' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-emerald-50' : ''}`}>
+                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+              </div>
+              <span className={`text-[9px] font-black uppercase tracking-[0.1em] text-center ${isActive ? 'opacity-100' : 'opacity-50'}`}>
+                {item.name.includes(' ') ? item.name.split(' ')[0] : item.name}
+              </span>
+            </Link>
+          );
+        })}
+        <Link
+          to="/profile"
+          className={`flex flex-col items-center gap-1 transition-all flex-1 ${
+            location.pathname === '/profile' ? 'text-emerald-900' : 'text-slate-400'
+          }`}
+        >
+          <div className={`p-1 rounded-xl transition-all ${location.pathname === '/profile' ? 'bg-emerald-50' : ''}`}>
+            <User size={20} />
+          </div>
+          <span className={`text-[9px] font-black uppercase tracking-[0.1em] text-center ${location.pathname === '/profile' ? 'opacity-100' : 'opacity-50'}`}>
+            Akun
+          </span>
+        </Link>
+      </nav>
     </div>
   );
 }
