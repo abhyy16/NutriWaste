@@ -417,7 +417,7 @@ export default function RecordWaste() {
               id="next-step-btn"
               disabled={!patientName || !wardId || !menuId}
               onClick={() => setStep(2)}
-              className="w-full bg-emerald-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-300 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
+              className="w-full bg-emerald-600 text-white font-black py-4 sm:py-5 rounded-2xl sm:rounded-[2rem] shadow-xl shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-300 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
             >
               Lanjutkan ke Skala Comstock
             </button>
@@ -493,7 +493,7 @@ export default function RecordWaste() {
               <button
                 id="back-btn"
                 onClick={() => setStep(1)}
-                className="flex-1 bg-slate-100 text-slate-600 font-bold py-5 rounded-[2rem] hover:bg-slate-200 transition-all uppercase tracking-widest text-xs"
+                className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 sm:py-5 rounded-2xl sm:rounded-[2rem] hover:bg-slate-200 transition-all uppercase tracking-widest text-xs"
               >
                 Kembali
               </button>
@@ -501,7 +501,7 @@ export default function RecordWaste() {
                 id="submit-record-btn"
                 disabled={selectedScale === null || isSubmitting}
                 onClick={handleSubmit}
-                className="flex-[2] bg-emerald-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
+                className="flex-[2] bg-emerald-600 text-white font-black py-4 sm:py-5 rounded-2xl sm:rounded-[2rem] shadow-xl shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
               >
                 {isSubmitting ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>

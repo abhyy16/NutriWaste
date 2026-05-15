@@ -353,7 +353,7 @@ export default function Dashboard() {
                 return (
                   <div key={mt} className="p-2 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter mb-1 truncate w-full">
-                      {mt.replace('_', ' ')}
+                      {(mt || '').replace('_', ' ')}
                     </p>
                     <p className={`text-sm font-black ${mtPercent > 20 ? 'text-red-500' : 'text-emerald-600'}`}>
                       {mtPercent.toFixed(0)}%

@@ -17,6 +17,8 @@ export default function Reports() {
   const [wards, setWards] = useState<Ward[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [selectedWard, setSelectedWard] = useState<string>('all');
+  const [selectedMealTime, setSelectedMealTime] = useState<string>('all');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -53,8 +55,14 @@ export default function Reports() {
     fetchData();
   }, [selectedMonth]);
 
+  const filteredTransactions = transactions.filter(t => {
+    const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
+    const mealTimeMatch = selectedMealTime === 'all' || t.mealTime === selectedMealTime;
+    return wardMatch && mealTimeMatch;
+  });
+
   const exportToExcel = () => {
-    const data = transactions.map(t => {
+    const data = filteredTransactions.map(t => {
       const menu = menus.find(m => m.id === t.menuId);
       const ward = wards.find(w => w.id === t.wardId);
       const wastePercent = ((t.wasteWeight / 400) * 100).toFixed(1);
@@ -70,7 +78,7 @@ export default function Reports() {
         'PJ Ruangan': t.staffInCharge || '-',
         'Jenis Diet': t.dietType || 'Biasa',
         'Menu': menu?.foodItems || 'Menu Siklus',
-        'Waktu Makan': t.mealTime.replace('_', ' ').toUpperCase(),
+        'Waktu Makan': (t.mealTime || '').replace('_', ' ').toUpperCase(),
         'Berat Sisa (g)': t.wasteWeight,
         'Berat Standar (g)': 400,
         'Persentase Waste (%)': wastePercent,
@@ -95,7 +103,7 @@ export default function Reports() {
     doc.setTextColor(100);
     doc.text(`Dicetak pada: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 30);
 
-    const tableData = transactions.map(t => {
+    const tableData = filteredTransactions.map(t => {
       const ward = wards.find(w => w.id === t.wardId);
       const wastePercent = ((t.wasteWeight / 400) * 100).toFixed(0);
 
@@ -104,7 +112,7 @@ export default function Reports() {
         `${t.patientName} (${t.patientGender || '-'})`,
         ward?.name || '-',
         `${t.roomNumber || '-'}/${t.bedNumber || '-'}`,
-        t.mealTime.replace('_', ' ').toUpperCase(),
+        (t.mealTime || '').replace('_', ' ').toUpperCase(),
         `${wastePercent}%`,
         t.reason || '-'
       ];
@@ -150,14 +158,14 @@ export default function Reports() {
           </div>
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Record</p>
-            <p className="text-2xl font-black text-slate-900">{transactions.length}</p>
+            <p className="text-2xl font-black text-slate-900">{filteredTransactions.length}</p>
           </div>
         </div>
 
         <div className="md:col-span-2 grid grid-cols-2 gap-3 items-center">
            <button 
              onClick={exportToExcel}
-             disabled={transactions.length === 0}
+             disabled={filteredTransactions.length === 0}
              className="flex items-center justify-center gap-2 px-4 py-4 bg-white border border-emerald-200 text-emerald-700 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-lg shadow-emerald-100/50 disabled:opacity-50 disabled:shadow-none text-xs sm:text-base"
            >
              <FileDown size={18} />
@@ -165,12 +173,50 @@ export default function Reports() {
            </button>
            <button 
              onClick={exportToPDF}
-             disabled={transactions.length === 0}
+             disabled={filteredTransactions.length === 0}
              className="flex items-center justify-center gap-2 px-4 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50 disabled:shadow-none text-xs sm:text-base"
            >
              <FileDown size={18} />
              <span>PDF</span>
            </button>
+        </div>
+      </div>
+
+      {/* Filter Section */}
+      <div className="bg-white p-4 sm:p-6 rounded-3xl border border-slate-200 space-y-4">
+        <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+          <TableIcon size={16} className="text-emerald-600" />
+          Filter Laporan
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Berdasarkan Bangsal</label>
+            <select
+              value={selectedWard}
+              onChange={(e) => setSelectedWard(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-sm"
+            >
+              <option value="all">Semua Bangsal</option>
+              {wards.map(w => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Waktu Makan</label>
+            <select
+              value={selectedMealTime}
+              onChange={(e) => setSelectedMealTime(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-sm"
+            >
+              <option value="all">Semua Waktu Makan</option>
+              <option value="sarapan">Sarapan</option>
+              <option value="selingan_1">Selingan 1</option>
+              <option value="makan_siang">Siang</option>
+              <option value="selingan_2">Selingan 2</option>
+              <option value="makan_malam">Malam</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -181,7 +227,7 @@ export default function Reports() {
              Preview Data
            </h3>
            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-             Tampilkan {transactions.length} record terbaru
+             Tampilkan {filteredTransactions.length} record terfilter
            </span>
         </div>
         
@@ -203,14 +249,14 @@ export default function Reports() {
                     <td colSpan={5} className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
                   </tr>
                 ))
-              ) : transactions.length === 0 ? (
+              ) : filteredTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
-                    Tidak ada data untuk periode ini.
+                    Tidak ada data yang cocok dengan kriteria filter.
                   </td>
                 </tr>
               ) : (
-                transactions.map(t => {
+                filteredTransactions.map(t => {
                   const menu = menus.find(m => m.id === t.menuId);
                   const ward = wards.find(w => w.id === t.wardId);
                     return (
@@ -226,7 +272,7 @@ export default function Reports() {
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center gap-1.5 text-slate-400 font-bold text-[11px]">
                             <Clock size={12} />
-                            {t.mealTime.replace('_', ' ')} • {format(t.timestamp || new Date(), 'dd/LL')}
+                            {(t.mealTime || '').replace('_', ' ')} • {format(t.timestamp || new Date(), 'dd/LL')}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">

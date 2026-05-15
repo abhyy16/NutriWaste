@@ -301,7 +301,7 @@ export default function MasterData() {
                   menus.sort((a,b) => a.cycleDay - b.cycleDay).map(menu => (
                     <tr key={menu.id} className="text-sm">
                       <td className="py-4 px-2 font-medium text-slate-700">
-                        H{menu.cycleDay} - {menu.mealTime.replace('_', ' ').toUpperCase()}
+                        H{menu.cycleDay} - {(menu.mealTime || '').replace('_', ' ').toUpperCase()}
                       </td>
                       <td className="py-4 text-slate-500 text-xs italic">{menu.foodItems}</td>
                       <td className="py-4 text-right">
