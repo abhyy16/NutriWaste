@@ -56,8 +56,8 @@ service cloud.firestore {
       return data.patientName is string && data.patientName.size() <= 100 &&
              data.patientAge is number &&
              data.patientGender in ['L', 'P'] &&
-             data.mealTime in ['B', 'L', 'D'] &&
-             data.comstockScale is number && data.comstockScale >= 0 && data.comstockScale <= 6 &&
+             data.mealTime in ['sarapan', 'selingan_1', 'makan_siang', 'selingan_2', 'makan_malam'] &&
+             data.comstockScale is number && data.comstockScale >= 0 && data.comstockScale <= 5 &&
              (data.get('reason', null) == null || data.reason is string) &&
              data.staffId == request.auth.uid &&
              (data.get('staffName', null) == null || data.staffName is string) &&

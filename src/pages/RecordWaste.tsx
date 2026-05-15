@@ -7,6 +7,7 @@ import { ClipboardCheck, CheckCircle2, User, Building2, UtensilsCrossed, Clock }
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { format } from 'date-fns';
+import ComstockAnimation from '../components/ComstockAnimation';
 
 export default function RecordWaste() {
   const { profile, setAssignedWard } = useAuth();
@@ -27,10 +28,12 @@ export default function RecordWaste() {
   const [roomNumber, setRoomNumber] = useState('');
   const [bedNumber, setBedNumber] = useState('');
   const [staffInCharge, setStaffInCharge] = useState('');
-  const [dietType, setDietType] = useState('');
+  const [dietType, setDietType] = useState('Biasa');
   const [wardId, setWardId] = useState(profile?.assignedWardId || '');
-  const [mealTime, setMealTime] = useState<MealTime>('B');
+  const [cycleDay, setCycleDay] = useState<number>(1);
+  const [mealTime, setMealTime] = useState<MealTime>('sarapan');
   const [menuId, setMenuId] = useState('');
+  const [foodItems, setFoodItems] = useState('');
   const [selectedScale, setSelectedScale] = useState<number | null>(null);
   const [reason, setReason] = useState('');
 
@@ -38,7 +41,17 @@ export default function RecordWaste() {
     'Pasien tidak nafsu makan',
     'Porsi terlalu besar',
     'Pasien pulang/tindakan medis',
-    'Makanan dingin'
+    'Makanan dingin',
+    'Rasa makanan kurang'
+  ];
+
+  const COMSTOCK_REFERENCE = [
+    { scale: 0, desc: '0% (Habis Total)' },
+    { scale: 1, desc: '25% (Sisa 1/4)' },
+    { scale: 2, desc: '50% (Sisa 1/2)' },
+    { scale: 3, desc: '75% (Sisa 3/4)' },
+    { scale: 4, desc: '95% (Hampir Utuh)' },
+    { scale: 5, desc: '100% (Utuh)' },
   ];
 
   useEffect(() => {
@@ -48,13 +61,25 @@ export default function RecordWaste() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const menuSnap = await getDocs(query(collection(db, 'menus'), orderBy('name')));
+      const menuSnap = await getDocs(query(collection(db, 'menus'), orderBy('cycleDay')));
       setMenus(menuSnap.docs.map(d => ({ id: d.id, ...d.data() } as Menu)));
       const wardSnap = await getDocs(query(collection(db, 'wards'), orderBy('name')));
       setWards(wardSnap.docs.map(d => ({ id: d.id, ...d.data() } as Ward)));
     };
     fetchData();
   }, []);
+
+  // Auto-set menu items based on cycleDay and mealTime
+  useEffect(() => {
+    const matchingMenu = menus.find(m => m.cycleDay === cycleDay && m.mealTime === mealTime);
+    if (matchingMenu) {
+      setMenuId(matchingMenu.id);
+      setFoodItems(matchingMenu.foodItems);
+    } else {
+      setMenuId('');
+      setFoodItems('');
+    }
+  }, [cycleDay, mealTime, menus]);
 
   // Sync ward from profile if available
   useEffect(() => {
@@ -72,16 +97,10 @@ export default function RecordWaste() {
   };
 
   const handleSubmit = async () => {
-    if (!profile || selectedScale === null || !menuId || !wardId || !patientName) return;
+    if (!profile || selectedScale === null || !wardId || !patientName) return;
     
     setIsSubmitting(true);
     setError(null);
-    const menu = menus.find(m => m.id === menuId);
-    if (!menu) {
-      setError('Menu tidak ditemukan');
-      setIsSubmitting(false);
-      return;
-    }
 
     const scale = COMSTOCK_VALUES.find(v => v.scale === selectedScale);
     if (!scale) {
@@ -90,8 +109,10 @@ export default function RecordWaste() {
       return;
     }
 
-    const wasteWeight = menu.standardWeight * (scale.percentage / 100);
-    const consumptionWeight = menu.standardWeight - wasteWeight;
+    // Default standard weight if not specified
+    const standardWeight = 400; 
+    const wasteWeight = standardWeight * (scale.percentage / 100);
+    const consumptionWeight = standardWeight - wasteWeight;
 
     try {
       await addDoc(collection(db, 'transactions'), {
@@ -102,9 +123,9 @@ export default function RecordWaste() {
         roomNumber,
         bedNumber,
         staffInCharge,
-        dietType: dietType || menu.dietType,
+        dietType,
         mealTime,
-        menuId,
+        menuId: menuId || 'manual',
         comstockScale: selectedScale,
         wasteWeight,
         consumptionWeight,
@@ -142,9 +163,10 @@ export default function RecordWaste() {
     setRoomNumber('');
     setBedNumber('');
     setStaffInCharge('');
-    setDietType('');
+    setDietType('Biasa');
     // Ward is kept for session persistence
     setMenuId('');
+    setFoodItems('');
     setSelectedScale(null);
     setReason('');
     setStep(1);
@@ -317,55 +339,78 @@ export default function RecordWaste() {
             <div className="bg-white p-6 rounded-[2rem] border border-slate-200 space-y-6 shadow-sm">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <UtensilsCrossed size={18} className="text-emerald-600" />
-                Menu & Jenis Diet
+                Menu & Siklus Hari
               </h3>
               
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hari Siklus</label>
+                    <select
+                      value={cycleDay}
+                      onChange={(e) => setCycleDay(Number(e.target.value))}
+                      className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7].map(d => (
+                        <option key={d} value={d}>Hari ke-{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Jenis Diet</label>
+                    <input
+                      type="text"
+                      list="diet-list"
+                      value={dietType}
+                      onChange={(e) => setDietType(e.target.value)}
+                      placeholder="Cth: Biasa, RD, RG"
+                      className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
+                    />
+                    <datalist id="diet-list">
+                      <option value="Biasa" />
+                      <option value="Lunak" />
+                      <option value="Saring" />
+                      <option value="RG (Rendah Garam)" />
+                      <option value="DM (Diabetes Melitus)" />
+                    </datalist>
+                  </div>
+                </div>
+
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Waktu Makan</label>
-                  <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                    {(['B', 'L', 'D'] as MealTime[]).map(m => (
+                  <div className="flex bg-slate-100 p-1.5 rounded-2xl overflow-x-auto no-scrollbar">
+                    {([
+                      { id: 'sarapan', label: 'Sarapan' },
+                      { id: 'selingan_1', label: 'Selingan 1' },
+                      { id: 'makan_siang', label: 'Siang' },
+                      { id: 'selingan_2', label: 'Selingan 2' },
+                      { id: 'makan_malam', label: 'Malam' }
+                    ] as { id: MealTime, label: string }[]).map(m => (
                       <button
-                        key={m}
-                        onClick={() => setMealTime(m)}
-                        className={`flex-1 py-3 text-xs font-black rounded-xl transition-all ${mealTime === m ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                        key={m.id}
+                        type="button"
+                        onClick={() => setMealTime(m.id)}
+                        className={`min-w-[80px] flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${mealTime === m.id ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
                       >
-                        {m === 'B' ? 'PAGI' : m === 'L' ? 'SIANG' : 'SORE'}
+                        {m.label.toUpperCase()}
                       </button>
                     ))}
                   </div>
                 </div>
+
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Pilih Menu Hari Ini</label>
-                  <select 
-                    value={menuId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setMenuId(id);
-                      const selected = menus.find(m => m.id === id);
-                      if (selected) setDietType(selected.dietType);
-                    }}
-                    className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
-                  >
-                    <option value="">-- Pilih Menu --</option>
-                    {menus.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} ({m.standardWeight}g)
-                      </option>
-                    ))}
-                  </select>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Detail Menu Terdeteksi</label>
+                  <textarea
+                    value={foodItems}
+                    onChange={(e) => setFoodItems(e.target.value)}
+                    placeholder="Isi menu hari ini..."
+                    className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-600 min-h-[80px] text-sm italic bg-slate-50/50"
+                  />
+                  {!foodItems && (
+                    <p className="text-[10px] text-amber-600 font-bold italic ml-1">* Menu belum diatur di Master Menu Siklus</p>
+                  )}
                 </div>
               </div>
-
-              {menuId && (
-                <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2">
-                  <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Informasi Diet</p>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-700">Jenis Diet: <span className="text-emerald-700">{dietType || 'Biasa'}</span></span>
-                    <span className="text-xs text-slate-500">Standar: {menus.find(m => m.id === menuId)?.standardWeight}g</span>
-                  </div>
-                </div>
-              )}
             </div>
 
             <button
@@ -393,29 +438,34 @@ export default function RecordWaste() {
                   <button onClick={() => setStep(1)} className="text-emerald-600 text-sm font-bold bg-emerald-50 px-4 py-2 rounded-full">Ubah Info</button>
                </div>
 
-               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                 {COMSTOCK_VALUES.map((v) => (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                 {COMSTOCK_REFERENCE.map((v) => (
                    <button
                     key={v.scale}
+                    type="button"
                     onClick={() => setSelectedScale(v.scale)}
                     className={`
-                      relative p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-2 text-center
+                      relative px-2 py-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-1 text-center
                       ${selectedScale === v.scale 
-                        ? 'border-emerald-600 bg-emerald-50 text-emerald-600' 
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-600 shadow-lg shadow-emerald-100' 
                         : 'border-slate-50 bg-slate-50/30 hover:border-slate-200 text-slate-500'}
                     `}
                    >
-                     <span className="text-3xl font-black">{v.percentage}%</span>
-                     <span className="text-[10px] font-bold uppercase tracking-tight">{v.label}</span>
+                     <ComstockAnimation scale={v.scale} isActive={selectedScale === v.scale} />
+                     <span className="text-[9px] font-black uppercase tracking-tight leading-tight px-2">{v.desc}</span>
                      {selectedScale === v.scale && (
-                       <div className="absolute top-3 right-3">
-                         <div className="bg-emerald-600 rounded-full p-0.5">
-                            <CheckCircle2 size={16} className="text-white" />
+                       <div className="absolute top-2 right-2">
+                         <div className="bg-emerald-600 rounded-full p-1 shadow-lg ring-2 ring-white">
+                            <CheckCircle2 size={12} className="text-white" />
                          </div>
                        </div>
                      )}
                    </button>
                  ))}
+               </div>
+
+               <div className="mt-8 p-4 bg-slate-50 rounded-2xl border border-slate-100 italic text-[10px] text-slate-500">
+                 * Gunakan gambar di atas sebagai acuan visual estimasi sisa makanan pasien (Metode Comstock).
                </div>
 
                <div className="mt-8 pt-8 border-t border-slate-100 space-y-4">

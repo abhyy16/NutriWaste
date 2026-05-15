@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { Menu, Ward, OperationType } from '../types';
+import { Menu, Ward, OperationType, MealTime } from '../types';
 import { Trash2, Plus, Database, Landmark, AlertCircle, CheckCircle2, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -23,13 +23,12 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 export default function MasterData() {
   const [menus, setMenus] = useState<Menu[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
-  const [activeTab, setActiveTab] = useState<'menus' | 'wards'>('menus');
+  const [activeTab, setActiveTab] = useState<'menus' | 'wards'>('wards'); // Default to wards
   
   // Menu form
-  const [menuName, setMenuName] = useState('');
-  const [weight, setWeight] = useState('');
-  const [dietType, setDietType] = useState('');
+  const [foodItems, setFoodItems] = useState('');
   const [cycleDay, setCycleDay] = useState('');
+  const [mealTime, setMealTime] = useState<MealTime>('sarapan');
 
   // Ward form
   const [wardName, setWardName] = useState('');
@@ -56,25 +55,10 @@ export default function MasterData() {
   };
 
   const seedDefaults = async () => {
-    if (!confirm('Gunakan data standar sebagai awal? Ini akan menambahkan beberapa jenis diet dan bangsal umum.')) return;
+    if (!confirm('Gunakan bangsal standar sebagai awal?')) return;
     setIsSubmitting(true);
     try {
-      const defaultDiets = [
-        { name: 'Makanan Biasa', standardWeight: 450, dietType: 'Biasa', cycleDay: 1 },
-        { name: 'Bubur Lunak', standardWeight: 400, dietType: 'Lunak', cycleDay: 1 },
-        { name: 'Bubur Saring', standardWeight: 300, dietType: 'Saring', cycleDay: 1 },
-        { name: 'Diet Rendah Garam', standardWeight: 400, dietType: 'RG', cycleDay: 1 },
-        { name: 'Diet Diabetes Melitus', standardWeight: 350, dietType: 'DM', cycleDay: 1 },
-        { name: 'Diet Jantung', standardWeight: 350, dietType: 'Jantung', cycleDay: 1 }
-      ];
-      
       const defaultWards = ['Bangsal Mawar', 'Bangsal Melati', 'Bangsal Anggrek', 'ICU', 'IGD'];
-
-      // Only add if lists are empty or user confirmed. 
-      // To keep it simple, we just add them.
-      for (const diet of defaultDiets) {
-        await addDoc(collection(db, 'menus'), { ...diet, createdAt: serverTimestamp() });
-      }
       
       for (const w of defaultWards) {
         await addDoc(collection(db, 'wards'), { name: w, createdAt: serverTimestamp() });
@@ -96,24 +80,22 @@ export default function MasterData() {
 
   const handleAddMenu = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!menuName || !weight || !dietType) return;
+    if (!foodItems || !cycleDay) return;
     setIsSubmitting(true);
     try {
       await addDoc(collection(db, 'menus'), {
-        name: menuName,
-        standardWeight: Number(weight),
-        dietType,
-        cycleDay: Number(cycleDay) || 1,
-        createdAt: serverTimestamp()
+        foodItems,
+        cycleDay: Number(cycleDay),
+        mealTime,
+        updatedBy: auth.currentUser?.uid,
+        updatedAt: serverTimestamp()
       });
-      setMenuName('');
-      setWeight('');
-      setDietType('');
+      setFoodItems('');
       setCycleDay('');
       notify('success', 'Menu berhasil ditambahkan');
       fetchData();
     } catch (error) {
-      notify('error', 'Gagal menambahkan menu. Periksa koneksi dan izin Anda.');
+      notify('error', 'Gagal menambahkan menu.');
       handleFirestoreError(error, OperationType.WRITE, 'menus');
     } finally {
       setIsSubmitting(false);
@@ -212,29 +194,18 @@ export default function MasterData() {
             <form onSubmit={handleAddMenu} className="space-y-4">
               <div className="flex items-center gap-2 mb-4 text-emerald-600">
                 <Database size={20} />
-                <h3 className="font-bold">Tambah Jenis Diet Baru</h3>
+                <h3 className="font-bold">Tambah Menu Siklus</h3>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Nama Diet</label>
-                <input
-                  type="text"
-                  value={menuName}
-                  onChange={(e) => setMenuName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
-                  placeholder="Contoh: Nasi Ayam Bakar"
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Rincian Menu</label>
+                <textarea
+                  value={foodItems}
+                  onChange={(e) => setFoodItems(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium min-h-[100px]"
+                  placeholder="Contoh: Nasi, Ayam Bakar, Lalapan"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Porsi Std (g)</label>
-                  <input
-                    type="number"
-                    value={weight}
-                    onChange={(e) => setWeight(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
-                    placeholder="300"
-                  />
-                </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Hari Siklus</label>
                   <input
@@ -242,30 +213,23 @@ export default function MasterData() {
                     value={cycleDay}
                     onChange={(e) => setCycleDay(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
-                    placeholder="1-10"
+                    placeholder="1-7"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Kategori Diet</label>
-                <input
-                  type="text"
-                  list="diet-options"
-                  value={dietType}
-                  onChange={(e) => setDietType(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
-                  placeholder="Contoh: Biasa, Lunak, RG, DM"
-                />
-                <datalist id="diet-options">
-                  <option value="Biasa" />
-                  <option value="Lunak" />
-                  <option value="Saring" />
-                  <option value="Rendah Garam (RG)" />
-                  <option value="Diabetes Melitus (DM)" />
-                  <option value="Rendah Kalori" />
-                  <option value="Tinggi Protein" />
-                  <option value="Jantung" />
-                </datalist>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Waktu Makan</label>
+                  <select
+                    value={mealTime}
+                    onChange={(e) => setMealTime(e.target.value as MealTime)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-medium"
+                  >
+                    <option value="sarapan">Sarapan</option>
+                    <option value="selingan_1">Selingan 1</option>
+                    <option value="makan_siang">Siang</option>
+                    <option value="selingan_2">Selingan 2</option>
+                    <option value="makan_malam">Malam</option>
+                  </select>
+                </div>
               </div>
               <button
                 type="submit"
@@ -277,7 +241,7 @@ export default function MasterData() {
                 ) : (
                   <>
                     <Plus size={20} />
-                    Tambah Jenis Diet
+                    Tambah Menu
                   </>
                 )}
               </button>
@@ -323,11 +287,10 @@ export default function MasterData() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th className="pb-4 px-2">{activeTab === 'menus' ? 'Nama Diet' : 'Nama Bangsal'}</th>
+                  <th className="pb-4 px-2">{activeTab === 'menus' ? 'Hari / Waktu' : 'Nama Bangsal'}</th>
                   {activeTab === 'menus' && (
                     <>
-                      <th className="pb-4">Berat</th>
-                      <th className="pb-4">Diet</th>
+                      <th className="pb-4">Rincian Menu</th>
                     </>
                   )}
                   <th className="pb-4 text-right">Aksi</th>
@@ -335,11 +298,12 @@ export default function MasterData() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {activeTab === 'menus' ? (
-                  menus.map(menu => (
+                  menus.sort((a,b) => a.cycleDay - b.cycleDay).map(menu => (
                     <tr key={menu.id} className="text-sm">
-                      <td className="py-4 px-2 font-medium text-slate-700">{menu.name}</td>
-                      <td className="py-4 text-slate-500">{menu.standardWeight}g</td>
-                      <td className="py-4 text-slate-500">{menu.dietType}</td>
+                      <td className="py-4 px-2 font-medium text-slate-700">
+                        H{menu.cycleDay} - {menu.mealTime.replace('_', ' ').toUpperCase()}
+                      </td>
+                      <td className="py-4 text-slate-500 text-xs italic">{menu.foodItems}</td>
                       <td className="py-4 text-right">
                         <div className="flex justify-end pr-2">
                           <button 

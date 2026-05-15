@@ -57,7 +57,7 @@ export default function Reports() {
     const data = transactions.map(t => {
       const menu = menus.find(m => m.id === t.menuId);
       const ward = wards.find(w => w.id === t.wardId);
-      const wastePercent = ((t.wasteWeight / (menu?.standardWeight || 1)) * 100).toFixed(1);
+      const wastePercent = ((t.wasteWeight / 400) * 100).toFixed(1);
 
       return {
         'Tanggal': format(t.timestamp || new Date(), 'dd/MM/yyyy'),
@@ -68,11 +68,11 @@ export default function Reports() {
         'Unit/Bangsal': ward?.name || 'Unknown',
         'Kamar/Bed': `${t.roomNumber || '-'}/${t.bedNumber || '-'}`,
         'PJ Ruangan': t.staffInCharge || '-',
-        'Jenis Diet': t.dietType || menu?.dietType || '-',
-        'Menu': menu?.name || 'Unknown',
-        'Waktu Makan': t.mealTime === 'B' ? 'Pagi' : t.mealTime === 'L' ? 'Siang' : 'Sore',
+        'Jenis Diet': t.dietType || 'Biasa',
+        'Menu': menu?.foodItems || 'Menu Siklus',
+        'Waktu Makan': t.mealTime.replace('_', ' ').toUpperCase(),
         'Berat Sisa (g)': t.wasteWeight,
-        'Berat Standar (g)': menu?.standardWeight || 0,
+        'Berat Standar (g)': 400,
         'Persentase Waste (%)': wastePercent,
         'Alasan': t.reason || '-',
         'Petugas Entry': t.staffName || '-'
@@ -96,16 +96,15 @@ export default function Reports() {
     doc.text(`Dicetak pada: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 30);
 
     const tableData = transactions.map(t => {
-      const menu = menus.find(m => m.id === t.menuId);
       const ward = wards.find(w => w.id === t.wardId);
-      const wastePercent = ((t.wasteWeight / (menu?.standardWeight || 1)) * 100).toFixed(0);
+      const wastePercent = ((t.wasteWeight / 400) * 100).toFixed(0);
 
       return [
         format(t.timestamp || new Date(), 'dd/MM/yy'),
         `${t.patientName} (${t.patientGender || '-'})`,
         ward?.name || '-',
         `${t.roomNumber || '-'}/${t.bedNumber || '-'}`,
-        t.mealTime,
+        t.mealTime.replace('_', ' ').toUpperCase(),
         `${wastePercent}%`,
         t.reason || '-'
       ];
@@ -214,29 +213,29 @@ export default function Reports() {
                 transactions.map(t => {
                   const menu = menus.find(m => m.id === t.menuId);
                   const ward = wards.find(w => w.id === t.wardId);
-                  return (
-                    <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="font-bold text-slate-800">{t.patientName} ({t.patientGender || '-'})</p>
-                        <p className="text-[10px] text-slate-400 font-medium">BED: {t.bedNumber || '-'}</p>
-                      </td>
-                      <td className="px-6 py-4 text-slate-600 font-medium">{ward?.name}</td>
-                      <td className="px-6 py-4">
-                         <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded uppercase">{t.dietType || menu?.dietType || 'Biasa'}</span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5 text-slate-400 font-bold text-[11px]">
-                          <Clock size={12} />
-                          {t.mealTime} • {format(t.timestamp || new Date(), 'dd/LL')}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                         <span className={`font-black ${((t.wasteWeight / (menu?.standardWeight || 1)) * 100) > 20 ? 'text-red-500' : 'text-emerald-600'}`}>
-                           {((t.wasteWeight / (menu?.standardWeight || 1)) * 100).toFixed(0)}%
-                         </span>
-                      </td>
-                    </tr>
-                  );
+                    return (
+                      <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4">
+                          <p className="font-bold text-slate-800">{t.patientName} ({t.patientGender || '-'})</p>
+                          <p className="text-[10px] text-slate-400 font-medium">BED: {t.bedNumber || '-'}</p>
+                        </td>
+                        <td className="px-6 py-4 text-slate-600 font-medium">{ward?.name}</td>
+                        <td className="px-6 py-4">
+                           <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded uppercase">{t.dietType || 'Biasa'}</span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5 text-slate-400 font-bold text-[11px]">
+                            <Clock size={12} />
+                            {t.mealTime.replace('_', ' ')} • {format(t.timestamp || new Date(), 'dd/LL')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                           <span className={`font-black ${((t.wasteWeight / 400) * 100) > 20 ? 'text-red-500' : 'text-emerald-600'}`}>
+                             {((t.wasteWeight / 400) * 100).toFixed(0)}%
+                           </span>
+                        </td>
+                      </tr>
+                    );
                 })
               )}
             </tbody>

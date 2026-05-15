@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { auth } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X, FileText, User } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X, FileText, User, Utensils } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
@@ -24,6 +24,7 @@ export default function Layout() {
     { name: 'Input Sisa Makan', path: '/record', icon: PlusCircle },
     { name: 'Laporan', path: '/reports', icon: FileText },
     ...(isAdmin ? [
+      { name: 'Master Menu', path: '/menu-cycle', icon: Utensils },
       { name: 'Data Master', path: '/master', icon: Database },
     ] : []),
   ];

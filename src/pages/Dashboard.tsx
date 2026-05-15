@@ -84,10 +84,11 @@ export default function Dashboard() {
       const menu = menus.find(m => m.id === editingTx.menuId);
       const scale = COMSTOCK_VALUES.find(v => v.scale === editingTx.comstockScale);
       
-      if (!menu || !scale) return;
+      if (!scale) return;
 
-      const wasteWeight = menu.standardWeight * (scale.percentage / 100);
-      const consumptionWeight = menu.standardWeight - wasteWeight;
+      const weight = 400; // Standard fallback
+      const wasteWeight = weight * (scale.percentage / 100);
+      const consumptionWeight = weight - wasteWeight;
 
       const txRef = doc(db, 'transactions', editingTx.id);
       await updateDoc(txRef, {
@@ -112,8 +113,8 @@ export default function Dashboard() {
   // Logical Helpers
   const avgWaste = transactions.length > 0 
     ? (transactions.reduce((acc, curr) => acc + curr.wasteWeight, 0) / transactions.reduce((acc, curr) => {
-        const menu = menus.find(m => m.id === curr.menuId);
-        return acc + (menu?.standardWeight || 0);
+        // Fallback weight if menu details are missing weight
+        return acc + 400; 
       }, 0)) * 100 
     : 0;
 
@@ -127,10 +128,7 @@ export default function Dashboard() {
     );
     
     const totalWaste = dayTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-    const totalServed = dayTransactions.reduce((acc, curr) => {
-      const menu = menus.find(m => m.id === curr.menuId);
-      return acc + (menu?.standardWeight || 0);
-    }, 0);
+    const totalServed = dayTransactions.length * 400;
 
     return {
       name: format(date, 'EEE'),
@@ -139,30 +137,25 @@ export default function Dashboard() {
   }).reverse();
 
   // Chart Data: Waste by Meal Time
-  const mealTimeData = ['B', 'L', 'D'].map(m => {
+  const mealTimes = ['sarapan', 'selingan_1', 'makan_siang', 'selingan_2', 'makan_malam'];
+  const mealTimeData = mealTimes.map(m => {
     const mtTransactions = transactions.filter(t => t.mealTime === m);
     const totalWaste = mtTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-    const totalServed = mtTransactions.reduce((acc, curr) => {
-      const menu = menus.find(m => m.id === curr.menuId);
-      return acc + (menu?.standardWeight || 0);
-    }, 0);
+    const totalServed = mtTransactions.length * 400;
 
     return {
-      name: m === 'B' ? 'Breakfast' : m === 'L' ? 'Lunch' : 'Dinner',
+      name: m.replace('_', ' ').toUpperCase(),
       value: totalServed > 0 ? Number(((totalWaste / totalServed) * 100).toFixed(1)) : 0
     };
   });
 
-  // Alarms: Menus with > 20% waste
-  const menuWastes = menus.map(menu => {
-    const menuTransactions = transactions.filter(t => t.menuId === menu.id);
-    const totalWaste = menuTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-    const totalServed = menuTransactions.reduce((acc, curr) => acc + (menu.standardWeight || 0), 0);
-    const wastePercent = totalServed > 0 ? (totalWaste / totalServed) * 100 : 0;
-    return { ...menu, wastePercent };
-  }).filter(m => m.wastePercent > 20);
+  // Alarms: Transactions with > 20% waste (Simplified as menus are cyclical now)
+  const menuAlerts = transactions.filter(t => {
+     const scale = COMSTOCK_VALUES.find(v => v.scale === t.comstockScale);
+     return scale && scale.percentage > 20;
+  }).slice(0, 5);
 
-  const COLORS = ['#10b981', '#34d399', '#6ee7b7'];
+  const COLORS = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#ecfdf5'];
 
   if (loading) return null;
 
@@ -266,10 +259,10 @@ export default function Dashboard() {
         />
         <StatCard 
           title="Alerts" 
-          value={menuWastes.length} 
+          value={menuAlerts.length} 
           subText="Critical" 
           icon={AlertTriangle} 
-          trend={menuWastes.length > 0 ? 'bad' : 'neutral'}
+          trend={menuAlerts.length > 0 ? 'bad' : 'neutral'}
         />
       </div>
 
@@ -345,8 +338,8 @@ export default function Dashboard() {
              <Clock className="text-emerald-600" size={20} />
              Ringkasan Hari Ini ({format(new Date(), 'dd MMM')})
            </h3>
-           <div className="grid grid-cols-3 gap-4">
-              {['B', 'L', 'D'].map(mt => {
+           <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              {mealTimes.map(mt => {
                 const todayTxs = transactions.filter(t => 
                   t.mealTime === mt && 
                   t.timestamp && 
@@ -354,21 +347,17 @@ export default function Dashboard() {
                 );
                 
                 const wasteTotal = todayTxs.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-                const servedTotal = todayTxs.reduce((acc, curr) => {
-                  const menu = menus.find(m => m.id === curr.menuId);
-                  return acc + (menu?.standardWeight || 0);
-                }, 0);
+                const servedTotal = todayTxs.length * 400;
                 const mtPercent = servedTotal > 0 ? (wasteTotal / servedTotal) * 100 : 0;
 
                 return (
-                  <div key={mt} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                      {mt === 'B' ? 'PAGI' : mt === 'L' ? 'SIANG' : 'SORE'}
+                  <div key={mt} className="p-2 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter mb-1 truncate w-full">
+                      {mt.replace('_', ' ')}
                     </p>
-                    <p className={`text-2xl font-black ${mtPercent > 20 ? 'text-red-500' : 'text-emerald-600'}`}>
+                    <p className={`text-sm font-black ${mtPercent > 20 ? 'text-red-500' : 'text-emerald-600'}`}>
                       {mtPercent.toFixed(0)}%
                     </p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{todayTxs.length} REKOR</p>
                   </div>
                 );
               })}
@@ -384,10 +373,7 @@ export default function Dashboard() {
               {wards.slice(0, 3).map(w => {
                  const wardTxs = transactions.filter(t => t.wardId === w.id);
                  const wasteTotal = wardTxs.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-                 const servedTotal = wardTxs.reduce((acc, curr) => {
-                    const menu = menus.find(m => m.id === curr.menuId);
-                    return acc + (menu?.standardWeight || 0);
-                 }, 0);
+                 const servedTotal = wardTxs.length * 400;
                  const percent = servedTotal > 0 ? (wasteTotal / servedTotal) * 100 : 0;
 
                  return (
@@ -418,21 +404,21 @@ export default function Dashboard() {
            </div>
            
            <div className="space-y-4">
-             {menuWastes.map(menu => (
-               <div key={menu.id} className="flex items-center justify-between p-4 bg-red-50 rounded-2xl">
+             {menuAlerts.map(tx => (
+               <div key={tx.id} className="flex items-center justify-between p-4 bg-red-50 rounded-2xl">
                  <div>
-                   <p className="font-bold text-red-900">{menu.name}</p>
-                   <p className="text-xs text-red-600 uppercase font-bold tracking-tight">{menu.dietType}</p>
+                   <p className="font-bold text-red-900">{tx.patientName}</p>
+                   <p className="text-xs text-red-600 uppercase font-bold tracking-tight">{tx.dietType || 'Biasa'}</p>
                  </div>
                  <div className="text-right">
-                   <p className="text-xl font-black text-red-600">{menu.wastePercent.toFixed(1)}%</p>
+                   <p className="text-xl font-black text-red-600">{((tx.wasteWeight / 400) * 100).toFixed(0)}%</p>
                    <p className="text-[10px] font-bold text-red-400">SISA MAKANAN</p>
                  </div>
                </div>
              ))}
-             {menuWastes.length === 0 && (
+             {menuAlerts.length === 0 && (
                <div className="text-center py-8 text-slate-400 italic">
-                 Tidak ada jenis diet melebihi ambang batas. Kerja bagus!
+                 Tidak ada catatan melebihi ambang batas. Kerja bagus!
                </div>
              )}
            </div>
@@ -462,7 +448,7 @@ export default function Dashboard() {
                     <div className="flex-1 overflow-hidden text-left">
                       <div className="flex items-center justify-between">
                         <p className="font-bold text-slate-800 truncate">{t.patientName}</p>
-                        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md uppercase tracking-tight">{t.dietType || menu?.dietType || 'Biasa'}</span>
+                        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md uppercase tracking-tight">{t.dietType || 'Biasa'}</span>
                       </div>
                       <p className="text-xs text-slate-400">
                         {ward?.name} 
@@ -470,7 +456,7 @@ export default function Dashboard() {
                         {t.bedNumber && ` • Bed ${t.bedNumber}`}
                       </p>
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-1 truncate">
-                        Menu: <span className="text-slate-400 italic">{menu?.name}</span>
+                        Menu: <span className="text-slate-400 italic">{menu?.foodItems || 'Siklus'}</span>
                       </p>
                     </div>
                     <div className="text-right flex flex-col items-end gap-2 shrink-0">
@@ -498,7 +484,7 @@ export default function Dashboard() {
                             </div>
                           )}
                           <div className="text-right">
-                            <p className="font-bold text-slate-900">{((t.wasteWeight / (menu?.standardWeight || 1)) * 100).toFixed(0)}%</p>
+                            <p className="font-bold text-slate-900">{((t.wasteWeight / 400) * 100).toFixed(0)}%</p>
                             <p className="text-[10px] text-slate-300 font-bold uppercase">{format(t.timestamp || new Date(), 'dd/MM HH:mm')}</p>
                           </div>
                        </div>
@@ -588,7 +574,12 @@ export default function Dashboard() {
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 outline-none font-bold text-slate-700"
                       required
                     >
-                      {menus.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      <option value="manual">Manual / Hari ini</option>
+                      {menus.map(m => (
+                        <option key={m.id} value={m.id}>
+                          H{m.cycleDay} - {m.mealTime.toUpperCase()}
+                        </option>
+                      ))}
                     </select>
                   </div>
 

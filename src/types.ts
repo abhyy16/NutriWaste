@@ -13,10 +13,11 @@ export interface UserProfile {
 
 export interface Menu {
   id: string;
-  name: string;
-  standardWeight: number; // grams
-  dietType: string;
   cycleDay: number;
+  mealTime: string;
+  foodItems: string;
+  updatedBy?: string;
+  updatedAt?: any;
 }
 
 export interface Ward {
@@ -24,7 +25,7 @@ export interface Ward {
   name: string;
 }
 
-export type MealTime = 'B' | 'L' | 'D'; // Breakfast, Lunch, Dinner
+export type MealTime = 'sarapan' | 'selingan_1' | 'makan_siang' | 'selingan_2' | 'makan_malam'; 
 
 export interface Transaction {
   id: string;

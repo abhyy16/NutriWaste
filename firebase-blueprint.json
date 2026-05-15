@@ -15,16 +15,16 @@
     },
     "Menu": {
       "title": "Menu",
-      "description": "Master data for food menus",
+      "description": "Master data for food menus following a 7-day cycle",
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
-        "standardWeight": { "type": "number", "description": "Standard portion weight in grams" },
-        "dietType": { "type": "string" },
-        "cycleDay": { "type": "number" },
-        "updatedBy": { "type": "string" }
+        "cycleDay": { "type": "number", "description": "Day in the cycle (1-7)" },
+        "mealTime": { "type": "string", "enum": ["sarapan", "selingan_1", "makan_siang", "selingan_2", "makan_malam"] },
+        "foodItems": { "type": "string", "description": "List of foods in this meal (comma separated or specific text)" },
+        "updatedBy": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "standardWeight", "dietType"]
+      "required": ["cycleDay", "mealTime", "foodItems"]
     },
     "Ward": {
       "title": "Ward",
@@ -44,9 +44,9 @@
         "patientAge": { "type": "number" },
         "patientGender": { "type": "string", "enum": ["L", "P"] },
         "wardId": { "type": "string" },
-        "mealTime": { "type": "string", "enum": ["B", "L", "D"] },
+        "mealTime": { "type": "string", "enum": ["sarapan", "selingan_1", "makan_siang", "selingan_2", "makan_malam"] },
         "menuId": { "type": "string" },
-        "comstockScale": { "type": "number", "enum": [0, 1, 2, 3, 4, 5, 6] },
+        "comstockScale": { "type": "number", "enum": [0, 1, 2, 3, 4, 5] },
         "wasteWeight": { "type": "number" },
         "consumptionWeight": { "type": "number" },
         "reason": { "type": "string", "description": "Reason for food waste" },
