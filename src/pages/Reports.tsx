@@ -3,12 +3,98 @@ import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Transaction, Menu, Ward } from '../types';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive } from 'lucide-react';
+import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { motion } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
+
+interface BarChartItem {
+  label: string;
+  percentage: number;
+  count: number;
+}
+
+function MiniBarChartCard({ title, data, maxItem, minItem, icon: Icon }: {
+  title: string;
+  data: BarChartItem[];
+  maxItem: BarChartItem | null;
+  minItem: BarChartItem | null;
+  icon: any;
+}) {
+  return (
+    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200/85 shadow-[0_10px_30px_-15px_rgba(148,163,184,0.12)] flex flex-col space-y-5 transition-all duration-300 hover:shadow-[0_20px_45px_-12px_rgba(148,163,184,0.18)] hover:border-slate-350">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2.5 bg-[#f0fdf4] text-emerald-600 rounded-2xl border border-emerald-100">
+            <Icon size={16} />
+          </div>
+          <h4 className="font-display font-black text-slate-800 text-sm tracking-tight">{title}</h4>
+        </div>
+        <span className="text-[8px] font-black tracking-widest text-slate-400 bg-slate-100 px-2.5 py-1 rounded-md uppercase font-display">Bar Chart</span>
+      </div>
+
+      <div className="flex-1 space-y-4 pt-1">
+        {data.map((item) => {
+          const isMax = maxItem && maxItem.label === item.label && item.percentage > 0;
+          const isMin = minItem && minItem.label === item.label && item.percentage > 0 && item.percentage !== maxItem?.percentage;
+
+          return (
+            <div key={item.label} className="space-y-1.5">
+              <div className="flex justify-between items-center text-[11px] font-bold">
+                <span className="text-slate-600 flex items-center gap-1.5 font-display">
+                  {item.label}
+                  <span className="text-[9px] text-slate-405 font-normal">({item.count}x)</span>
+                  {isMax && (
+                    <span className="bg-rose-50 border border-rose-200 text-rose-600 text-[8px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-md">
+                      Maks
+                    </span>
+                  )}
+                  {isMin && (
+                    <span className="bg-emerald-50 border border-emerald-200 text-emerald-600 text-[8px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-md">
+                      Min
+                    </span>
+                  )}
+                </span>
+                <span className={`font-mono font-bold ${item.percentage > 20 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {item.percentage.toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-3 bg-slate-100 rounded-full overflow-hidden relative">
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${
+                    item.percentage > 20 ? 'from-rose-500 to-amber-500' : 'from-emerald-500 to-teal-500'
+                  }`}
+                  style={{ width: `${Math.min(item.percentage, 100)}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="pt-4 border-t border-slate-150 grid grid-cols-2 gap-3 text-[10px]">
+        <div className="p-3 rounded-2xl bg-rose-500/5 border border-rose-100">
+          <p className="font-extrabold text-rose-500/80 uppercase tracking-widest text-[8.5px] font-display">Sisa Tertinggi</p>
+          <p className="font-display font-black text-rose-700 truncate mt-1">
+            {maxItem && maxItem.percentage > 0 
+              ? `${maxItem.label} (${maxItem.percentage.toFixed(1)}%)`
+              : 'Tidak ada data'}
+          </p>
+        </div>
+        <div className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-100">
+          <p className="font-extrabold text-emerald-500/80 uppercase tracking-widest text-[8.5px] font-display">Sisa Terendah</p>
+          <p className="font-display font-black text-emerald-700 truncate mt-1">
+            {minItem && minItem.percentage > 0 
+              ? `${minItem.label} (${minItem.percentage.toFixed(1)}%)`
+              : 'Tidak ada data'}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Reports() {
   const { user, profile } = useAuth();
@@ -19,38 +105,45 @@ export default function Reports() {
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [selectedWard, setSelectedWard] = useState<string>('all');
   const [selectedMealTime, setSelectedMealTime] = useState<string>('all');
+  const [selectedFoodType, setSelectedFoodType] = useState<string>('all');
+  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState<string>('all');
+  const [selectedCycleDay, setSelectedCycleDay] = useState<string>('all');
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const start = startOfMonth(parseISO(selectedMonth + '-01'));
-      const end = endOfMonth(start);
+      try {
+        const start = startOfMonth(parseISO(selectedMonth + '-01'));
+        const end = endOfMonth(start);
 
-      let q = query(
-        collection(db, 'transactions'), 
-        where('staffId', '==', profile?.id || ''),
-        where('timestamp', '>=', start),
-        where('timestamp', '<=', end)
-      );
+        const q = query(
+          collection(db, 'transactions'), 
+          where('timestamp', '>=', start),
+          where('timestamp', '<=', end)
+        );
 
-      const tSnap = await getDocs(q);
-      
-      const txs = tSnap.docs.map(d => ({ 
-        id: d.id, 
-        ...d.data(),
-        timestamp: d.data().timestamp?.toDate() 
-      } as Transaction)).sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0));
+        const tSnap = await getDocs(q);
+        
+        const txs = tSnap.docs.map(d => ({ 
+          id: d.id, 
+          ...d.data(),
+          timestamp: d.data().timestamp?.toDate() 
+        } as Transaction)).sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0));
 
-      setTransactions(txs);
+        setTransactions(txs);
 
-      const [mSnap, wSnap] = await Promise.all([
-        getDocs(collection(db, 'menus')),
-        getDocs(collection(db, 'wards'))
-      ]);
+        const [mSnap, wSnap] = await Promise.all([
+          getDocs(collection(db, 'menus')),
+          getDocs(collection(db, 'wards'))
+        ]);
 
-      setMenus(mSnap.docs.map(d => ({ id: d.id, ...d.data() } as Menu)));
-      setWards(wSnap.docs.map(d => ({ id: d.id, ...d.data() } as Ward)));
-      setLoading(false);
+        setMenus(mSnap.docs.map(d => ({ id: d.id, ...d.data() } as Menu)));
+        setWards(wSnap.docs.map(d => ({ id: d.id, ...d.data() } as Ward)));
+      } catch (err) {
+        console.error("Error fetching report data:", err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchData();
   }, [selectedMonth]);
@@ -58,8 +151,113 @@ export default function Reports() {
   const filteredTransactions = transactions.filter(t => {
     const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
     const mealTimeMatch = selectedMealTime === 'all' || t.mealTime === selectedMealTime;
-    return wardMatch && mealTimeMatch;
+    const foodTypeMatch = selectedFoodType === 'all' || (t.foodType || 'Makanan Pokok') === selectedFoodType;
+    
+    let dayOfWeekNum = -1;
+    if (t.timestamp) {
+      dayOfWeekNum = t.timestamp.getDay();
+    }
+    const dayMap: Record<string, number> = {
+      'minggu': 0, 'senin': 1, 'selasa': 2, 'rabu': 3, 'kamis': 4, 'jumat': 5, 'sabtu': 6
+    };
+    const dayOfWeekMatch = selectedDayOfWeek === 'all' || dayOfWeekNum === dayMap[selectedDayOfWeek.toLowerCase()];
+    
+    const menu = menus.find(m => m.id === t.menuId);
+    const cycleDayMatch = selectedCycleDay === 'all' || (menu && String(menu.cycleDay) === selectedCycleDay);
+    
+    return wardMatch && mealTimeMatch && foodTypeMatch && dayOfWeekMatch && cycleDayMatch;
   });
+
+  const foodTypes = [
+    'Makanan Pokok',
+    'Lauk Hewani',
+    'Lauk Nabati',
+    'Sayuran',
+    'Buah / Selingan',
+    'Semua (Komposit)'
+  ];
+
+  const wasteByFoodType = foodTypes.map(fType => {
+    const matchingTxs = transactions.filter(t => {
+      const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
+      return wardMatch && (t.foodType || 'Makanan Pokok') === fType;
+    });
+    const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
+    const count = matchingTxs.length;
+    const percentage = count > 0 ? (totalWaste / (count * 400)) * 100 : 0;
+    return { label: fType, percentage, count };
+  });
+
+  const activeFoodTypes = wasteByFoodType.filter(item => item.count > 0);
+  const maxFoodType = activeFoodTypes.length > 0 ? activeFoodTypes.reduce((prev, current) => (prev.percentage > current.percentage) ? prev : current) : null;
+  const minFoodType = activeFoodTypes.length > 0 ? activeFoodTypes.reduce((prev, current) => (prev.percentage < current.percentage) ? prev : current) : null;
+
+  const mealTimesList = [
+    { value: 'sarapan', label: 'Sarapan' },
+    { value: 'selingan_1', label: 'Selingan 1' },
+    { value: 'makan_siang', label: 'Siang' },
+    { value: 'selingan_2', label: 'Selingan 2' },
+    { value: 'makan_malam', label: 'Malam' }
+  ];
+
+  const wasteByMealTime = mealTimesList.map(mt => {
+    const matchingTxs = transactions.filter(t => {
+      const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
+      return wardMatch && t.mealTime === mt.value;
+    });
+    const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
+    const count = matchingTxs.length;
+    const percentage = count > 0 ? (totalWaste / (count * 400)) * 100 : 0;
+    return { label: mt.label, percentage, count };
+  });
+
+  const activeMealTimes = wasteByMealTime.filter(item => item.count > 0);
+  const maxMealTime = activeMealTimes.length > 0 ? activeMealTimes.reduce((prev, current) => (prev.percentage > current.percentage) ? prev : current) : null;
+  const minMealTime = activeMealTimes.length > 0 ? activeMealTimes.reduce((prev, current) => (prev.percentage < current.percentage) ? prev : current) : null;
+
+  const daysOfWeek = [
+    { value: 1, label: 'Senin' },
+    { value: 2, label: 'Selasa' },
+    { value: 3, label: 'Rabu' },
+    { value: 4, label: 'Kamis' },
+    { value: 5, label: 'Jumat' },
+    { value: 6, label: 'Sabtu' },
+    { value: 0, label: 'Minggu' }
+  ];
+
+  const wasteByDay = daysOfWeek.map(d => {
+    const matchingTxs = transactions.filter(t => {
+      const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
+      const tDay = t.timestamp ? t.timestamp.getDay() : -1;
+      return wardMatch && tDay === d.value;
+    });
+    const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
+    const count = matchingTxs.length;
+    const percentage = count > 0 ? (totalWaste / (count * 400)) * 100 : 0;
+    return { label: d.label, percentage, count };
+  });
+
+  const activeDays = wasteByDay.filter(item => item.count > 0);
+  const maxDay = activeDays.length > 0 ? activeDays.reduce((prev, current) => (prev.percentage > current.percentage) ? prev : current) : null;
+  const minDay = activeDays.length > 0 ? activeDays.reduce((prev, current) => (prev.percentage < current.percentage) ? prev : current) : null;
+
+  const cycleDays = Array.from({ length: 10 }, (_, i) => i + 1);
+
+  const wasteByCycle = cycleDays.map(cd => {
+    const matchingMenuIds = menus.filter(m => m.cycleDay === cd).map(m => m.id);
+    const matchingTxs = transactions.filter(t => {
+      const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
+      return wardMatch && matchingMenuIds.includes(t.menuId);
+    });
+    const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
+    const count = matchingTxs.length;
+    const percentage = count > 0 ? (totalWaste / (count * 400)) * 100 : 0;
+    return { label: `Hari ${cd}`, percentage, count };
+  });
+
+  const activeCycles = wasteByCycle.filter(item => item.count > 0);
+  const maxCycle = activeCycles.length > 0 ? activeCycles.reduce((prev, current) => (prev.percentage > current.percentage) ? prev : current) : null;
+  const minCycle = activeCycles.length > 0 ? activeCycles.reduce((prev, current) => (prev.percentage < current.percentage) ? prev : current) : null;
 
   const exportToExcel = () => {
     const data = filteredTransactions.map(t => {
@@ -79,6 +277,7 @@ export default function Reports() {
         'Jenis Diet': t.dietType || 'Biasa',
         'Menu': menu?.foodItems || 'Menu Siklus',
         'Waktu Makan': (t.mealTime || '').replace('_', ' ').toUpperCase(),
+        'Jenis Makanan': t.foodType || 'Makanan Pokok',
         'Berat Sisa (g)': t.wasteWeight,
         'Berat Standar (g)': 400,
         'Persentase Waste (%)': wastePercent,
@@ -113,6 +312,7 @@ export default function Reports() {
         ward?.name || '-',
         `${t.roomNumber || '-'}/${t.bedNumber || '-'}`,
         (t.mealTime || '').replace('_', ' ').toUpperCase(),
+        t.foodType || 'Makanan Pokok',
         `${wastePercent}%`,
         t.reason || '-'
       ];
@@ -120,7 +320,7 @@ export default function Reports() {
 
     autoTable(doc, {
       startY: 35,
-      head: [['Tanggal', 'Pasien', 'Unit', 'Kmr/Bed', 'Wkt', 'Waste %', 'Alasan']],
+      head: [['Tanggal', 'Pasien', 'Unit', 'Kmr/Bed', 'Wkt', 'Jenis', 'Waste %', 'Alasan']],
       body: tableData,
       theme: 'striped',
       headStyles: { fillColor: [5, 150, 105] }, // emerald-600
@@ -183,18 +383,18 @@ export default function Reports() {
       </div>
 
       {/* Filter Section */}
-      <div className="bg-white p-4 sm:p-6 rounded-3xl border border-slate-200 space-y-4">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
         <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
           <TableIcon size={16} className="text-emerald-600" />
           Filter Laporan
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Berdasarkan Bangsal</label>
             <select
               value={selectedWard}
               onChange={(e) => setSelectedWard(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-sm"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-xs sm:text-sm"
             >
               <option value="all">Semua Bangsal</option>
               {wards.map(w => (
@@ -202,12 +402,13 @@ export default function Reports() {
               ))}
             </select>
           </div>
+          
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Waktu Makan</label>
             <select
               value={selectedMealTime}
               onChange={(e) => setSelectedMealTime(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-sm"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-xs sm:text-sm"
             >
               <option value="all">Semua Waktu Makan</option>
               <option value="sarapan">Sarapan</option>
@@ -217,7 +418,85 @@ export default function Reports() {
               <option value="makan_malam">Malam</option>
             </select>
           </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Jenis Makanan</label>
+            <select
+              value={selectedFoodType}
+              onChange={(e) => setSelectedFoodType(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-xs sm:text-sm"
+            >
+              <option value="all">Semua Jenis</option>
+              {foodTypes.map(ft => (
+                <option key={ft} value={ft}>{ft}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hari</label>
+            <select
+              value={selectedDayOfWeek}
+              onChange={(e) => setSelectedDayOfWeek(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-xs sm:text-sm"
+            >
+              <option value="all">Semua Hari</option>
+              <option value="Senin">Senin</option>
+              <option value="Selasa">Selasa</option>
+              <option value="Rabu">Rabu</option>
+              <option value="Kamis">Kamis</option>
+              <option value="Jumat">Jumat</option>
+              <option value="Sabtu">Sabtu</option>
+              <option value="Minggu">Minggu</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hari Siklus</label>
+            <select
+              value={selectedCycleDay}
+              onChange={(e) => setSelectedCycleDay(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-xs sm:text-sm"
+            >
+              <option value="all">Semua Siklus</option>
+              {Array.from({ length: 10 }, (_, i) => i + 1).map(day => (
+                <option key={day} value={String(day)}>Hari Siklus {day}</option>
+              ))}
+            </select>
+          </div>
         </div>
+      </div>
+
+      {/* Four Visual Bar Charts showing food waste percentage configurations */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <MiniBarChartCard 
+          title="Waste per Jenis Makanan" 
+          data={wasteByFoodType} 
+          maxItem={maxFoodType} 
+          minItem={minFoodType} 
+          icon={Utensils} 
+        />
+        <MiniBarChartCard 
+          title="Waste per Waktu Makan" 
+          data={wasteByMealTime} 
+          maxItem={maxMealTime} 
+          minItem={minMealTime} 
+          icon={Clock} 
+        />
+        <MiniBarChartCard 
+          title="Waste per Hari" 
+          data={wasteByDay} 
+          maxItem={maxDay} 
+          minItem={minDay} 
+          icon={Calendar} 
+        />
+        <MiniBarChartCard 
+          title="Waste per Hari Siklus" 
+          data={wasteByCycle} 
+          maxItem={maxCycle} 
+          minItem={minCycle} 
+          icon={Layers} 
+        />
       </div>
 
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
@@ -239,6 +518,7 @@ export default function Reports() {
                 <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Unit</th>
                 <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Diet</th>
                 <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Waktu</th>
+                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Jenis Makanan</th>
                 <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-right">Waste</th>
               </tr>
             </thead>
@@ -246,12 +526,12 @@ export default function Reports() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td colSpan={5} className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
+                    <td colSpan={6} className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
                   </tr>
                 ))
               ) : filteredTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
                     Tidak ada data yang cocok dengan kriteria filter.
                   </td>
                 </tr>
@@ -274,6 +554,9 @@ export default function Reports() {
                             <Clock size={12} />
                             {(t.mealTime || '').replace('_', ' ')} • {format(t.timestamp || new Date(), 'dd/LL')}
                           </div>
+                        </td>
+                        <td className="px-6 py-4">
+                           <span className="px-2 py-1 bg-amber-50 text-amber-700 text-[10px] font-black rounded uppercase whitespace-nowrap">{t.foodType || 'Makanan Pokok'}</span>
                         </td>
                         <td className="px-6 py-4 text-right">
                            <span className={`font-black ${((t.wasteWeight / 400) * 100) > 20 ? 'text-red-500' : 'text-emerald-600'}`}>

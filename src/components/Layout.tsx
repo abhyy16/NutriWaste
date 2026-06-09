@@ -1,8 +1,8 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { auth } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X, FileText, User, Utensils } from 'lucide-react';
-import { useState } from 'react';
+import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X, FileText, User, Utensils, WifiOff } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -11,6 +11,20 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -33,17 +47,17 @@ export default function Layout() {
     <>
       {!isMobile && (
         <div className="p-6">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-100">N</div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-emerald-250/30">N</div>
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Nutriwaste</h1>
-              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Digital Nutrition</span>
+              <h1 className="text-xl font-display font-black text-slate-800 tracking-tight leading-none">Nutriwaste</h1>
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest block mt-0.5">Digital Nutrition</span>
             </div>
           </div>
         </div>
       )}
 
-      <nav className={`flex-1 p-4 ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
+      <nav className={`flex-1 p-4 ${isMobile ? 'space-y-2' : 'space-y-1.5'}`}>
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
@@ -53,15 +67,19 @@ export default function Layout() {
               to={item.path}
               onClick={() => isMobile && setIsMenuOpen(false)}
               className={`
-                flex items-center gap-3 px-4 py-3 rounded-xl transition-all
+                flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group
                 ${isActive 
-                  ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm shadow-emerald-50' 
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold shadow-md shadow-emerald-500/20' 
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
                 ${isMobile ? 'text-base py-4' : 'text-sm'}
               `}
             >
-              <Icon size={isMobile ? 22 : 20} strokeWidth={isActive ? 2.5 : 2} />
-              <span>{item.name}</span>
+              <Icon 
+                size={isMobile ? 22 : 18} 
+                strokeWidth={isActive ? 2.5 : 2} 
+                className={`transition-transform duration-200 group-hover:scale-105 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`} 
+              />
+              <span className="font-display tracking-wide">{item.name}</span>
             </Link>
           );
         })}
@@ -71,26 +89,26 @@ export default function Layout() {
         <Link 
           to="/profile"
           onClick={() => isMobile && setIsMenuOpen(false)}
-          className="flex items-center gap-3 px-3 py-2 mb-3 bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-200 hover:ring-2 hover:ring-emerald-50 transition-all group"
+          className="flex items-center gap-3 px-3 py-2.5 mb-3 bg-white rounded-2xl border border-slate-250 shadow-sm hover:border-emerald-300 hover:ring-2 hover:ring-emerald-50/70 transition-all group lg:min-h-[60px]"
         >
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold group-hover:bg-emerald-600 group-hover:text-white transition-colors overflow-hidden flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-extrabold shadow-md shadow-emerald-500/10 overflow-hidden flex-shrink-0">
             {profile?.photoURL ? (
               <img src={profile.photoURL} alt="Profile" className="w-full h-full object-cover" />
             ) : (
-              profile?.name.charAt(0)
+              profile?.name.substring(0, 2).toUpperCase() || 'UN'
             )}
           </div>
           <div className="flex-1 overflow-hidden text-left">
-            <p className="text-sm font-bold text-slate-800 truncate leading-tight">{profile?.name}</p>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter truncate">{profile?.role}</p>
+            <p className="text-sm font-display font-black text-slate-800 truncate leading-tight">{profile?.name}</p>
+            <p className="text-[9px] text-emerald-600 font-extrabold uppercase tracking-widest mt-0.5">{profile?.role || 'Staff'}</p>
           </div>
         </Link>
         <button
           onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-red-500 hover:bg-red-50/80 rounded-xl transition-all border border-transparent hover:border-red-100"
         >
-          <LogOut size={16} />
-          <span>Logout Session</span>
+          <LogOut size={15} />
+          <span className="font-display">Logout Session</span>
         </button>
       </div>
     </>
@@ -191,6 +209,26 @@ export default function Layout() {
           </span>
         </Link>
       </nav>
+
+      {/* Offline Indicator Alert */}
+      <AnimatePresence>
+        {!isOnline && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-24 md:bottom-8 right-6 bg-slate-900/95 backdrop-blur text-white px-5 py-4.5 rounded-[1.5rem] shadow-2xl border border-slate-800 flex items-center gap-3.5 z-50 max-w-sm"
+          >
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+              <WifiOff size={20} className="animate-pulse" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-white uppercase tracking-wider">Koneksi Terputus</p>
+              <p className="text-[10px] font-bold text-slate-400 mt-0.5 leading-relaxed">Anda sedang offline. Aplikasi Nutriwaste siap berjalan dengan data lokal secara mandiri.</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

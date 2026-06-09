@@ -32,6 +32,7 @@ export default function RecordWaste() {
   const [wardId, setWardId] = useState(profile?.assignedWardId || '');
   const [cycleDay, setCycleDay] = useState<number>(1);
   const [mealTime, setMealTime] = useState<MealTime>('sarapan');
+  const [foodType, setFoodType] = useState('Makanan Pokok');
   const [menuId, setMenuId] = useState('');
   const [foodItems, setFoodItems] = useState('');
   const [selectedScale, setSelectedScale] = useState<number | null>(null);
@@ -125,6 +126,7 @@ export default function RecordWaste() {
         staffInCharge,
         dietType,
         mealTime,
+        foodType,
         menuId: menuId || 'manual',
         comstockScale: selectedScale,
         wasteWeight,
@@ -167,6 +169,7 @@ export default function RecordWaste() {
     // Ward is kept for session persistence
     setMenuId('');
     setFoodItems('');
+    setFoodType('Makanan Pokok');
     setSelectedScale(null);
     setReason('');
     setStep(1);
@@ -194,23 +197,34 @@ export default function RecordWaste() {
       </header>
 
       {/* Staff Info Card */}
-      <div className="bg-emerald-600 rounded-[2rem] p-6 text-white shadow-xl shadow-emerald-100 flex items-center justify-between overflow-hidden relative">
-        <div className="relative z-10">
-          <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">Petugas Bertugas</p>
-          <h3 className="text-xl font-bold">{profile?.name}</h3>
-          <p className="text-xs opacity-80 mt-1">NIP: {profile?.nip}</p>
+      <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-[2.5rem] p-6.5 text-white shadow-xl shadow-emerald-600/10 flex items-center justify-between overflow-hidden relative border border-emerald-500/10">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_30%,rgba(255,255,255,0.08),transparent_50%)] pointer-events-none" />
+        <div className="relative z-10 space-y-1">
+          <p className="text-[9px] font-black uppercase tracking-widest text-emerald-200 block mb-1">Petugas Aktif</p>
+          <h3 className="text-2xl font-display font-black leading-none">{profile?.name}</h3>
+          <p className="text-xs font-semibold text-emerald-50/80 mt-1">NIP. {profile?.nip || '-'}</p>
         </div>
-        <User size={64} className="absolute -right-4 -bottom-4 opacity-10" />
+        <User size={72} className="absolute -right-2 -bottom-2 opacity-[0.08] stroke-[1.5]" />
       </div>
 
       {/* Progress Indicator */}
-      <div className="flex gap-2">
-        {[1, 2].map((i) => (
-          <div 
-            key={i}
-            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${step >= i ? 'bg-emerald-600' : 'bg-slate-200'}`}
-          />
-        ))}
+      <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md px-6 py-4.5 rounded-[2rem] border border-slate-200 shadow-sm justify-between">
+        <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-400 font-display">Progres Langkah</span>
+        <div className="flex gap-2 w-32 items-center">
+          {[1, 2].map((i) => (
+            <div 
+              key={i}
+              className={`h-2 flex-1 rounded-full transition-all duration-350 ${
+                step === i 
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 shadow-sm ring-2 ring-emerald-100' 
+                  : step > i 
+                    ? 'bg-emerald-500' 
+                    : 'bg-slate-200'
+              }`}
+            />
+          ))}
+        </div>
+        <span className="text-xs font-black text-emerald-600 font-display">Langkah {step} dari 2</span>
       </div>
 
       <AnimatePresence>
@@ -399,6 +413,29 @@ export default function RecordWaste() {
                 </div>
 
                 <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Jenis Makanan</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+                    {[
+                      'Makanan Pokok',
+                      'Lauk Hewani',
+                      'Lauk Nabati',
+                      'Sayuran',
+                      'Buah / Selingan',
+                      'Semua (Komposit)'
+                    ].map(fType => (
+                      <button
+                        key={fType}
+                        type="button"
+                        onClick={() => setFoodType(fType)}
+                        className={`py-3 text-[10px] font-black rounded-xl transition-all ${foodType === fType ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        {fType.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Detail Menu Terdeteksi</label>
                   <textarea
                     value={foodItems}
@@ -415,7 +452,7 @@ export default function RecordWaste() {
 
             <button
               id="next-step-btn"
-              disabled={!patientName || !wardId || !menuId}
+              disabled={!patientName || !wardId}
               onClick={() => setStep(2)}
               className="w-full bg-emerald-600 text-white font-black py-4 sm:py-5 rounded-2xl sm:rounded-[2rem] shadow-xl shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-300 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
             >
@@ -438,25 +475,27 @@ export default function RecordWaste() {
                   <button onClick={() => setStep(1)} className="text-emerald-600 text-sm font-bold bg-emerald-50 px-4 py-2 rounded-full">Ubah Info</button>
                </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                  {COMSTOCK_REFERENCE.map((v) => (
                    <button
                     key={v.scale}
                     type="button"
                     onClick={() => setSelectedScale(v.scale)}
                     className={`
-                      relative px-2 py-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-1 text-center
+                      relative p-5 rounded-[2rem] border-2 transition-all duration-300 flex flex-col items-center gap-2.5 text-center group cursor-pointer
                       ${selectedScale === v.scale 
-                        ? 'border-emerald-600 bg-emerald-50 text-emerald-600 shadow-lg shadow-emerald-100' 
-                        : 'border-slate-50 bg-slate-50/30 hover:border-slate-200 text-slate-500'}
+                        ? 'border-emerald-500 bg-gradient-to-b from-emerald-50/50 to-teal-50/10 text-emerald-700 shadow-md shadow-emerald-500/5 ring-4 ring-emerald-100' 
+                        : 'border-slate-200 bg-[#fbfcfd] hover:border-slate-300 hover:bg-slate-50 text-slate-500'}
                     `}
                    >
-                     <ComstockAnimation scale={v.scale} isActive={selectedScale === v.scale} />
-                     <span className="text-[9px] font-black uppercase tracking-tight leading-tight px-2">{v.desc}</span>
+                     <div className="transition-all duration-300 group-hover:scale-105">
+                       <ComstockAnimation scale={v.scale} isActive={selectedScale === v.scale} />
+                     </div>
+                     <span className="text-[9.5px] font-black uppercase tracking-wider leading-tight px-1 font-display">{v.desc}</span>
                      {selectedScale === v.scale && (
-                       <div className="absolute top-2 right-2">
-                         <div className="bg-emerald-600 rounded-full p-1 shadow-lg ring-2 ring-white">
-                            <CheckCircle2 size={12} className="text-white" />
+                       <div className="absolute top-3 right-3">
+                         <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full p-1 shadow shadow-emerald-500/20 ring-4 ring-white">
+                            <CheckCircle2 size={10} className="text-white fill-white" />
                          </div>
                        </div>
                      )}

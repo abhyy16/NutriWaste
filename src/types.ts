@@ -38,6 +38,7 @@ export interface Transaction {
   staffInCharge?: string; // New field as requested
   dietType?: string;      // New field as requested
   mealTime: MealTime;
+  foodType?: string;
   menuId: string;
   comstockScale: number; // 0-6
   wasteWeight: number;

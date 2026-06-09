@@ -1,26 +1,30 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Initialize Firestore with robust local offline persistence (using IndexedDB persistent cache)
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+}, firebaseConfig.firestoreDatabaseId);
+
 export const auth = getAuth(app);
 
-// Connection test
+// Connection test - quiet and resilient
 async function testConnection() {
   try {
-    // Try to get a non-existent document to test connectivity
+    // Try to get a non-existent document to check status
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error: any) {
-    // If it fails with 'unavailable' or 'offline', it indicates a real connectivity issue.
-    // 'permission-denied' (Missing or insufficient permissions) is actually a good sign 
-    // that the backend is reached but our rules are doing their job.
     const errorMessage = error?.message?.toLowerCase() || '';
     const isConnectivityError = errorMessage.includes('offline') || errorMessage.includes('unavailable');
     
     if (isConnectivityError) {
-      console.error('Firestore connection failed: Please check your internet connection or Firebase configuration.', error);
+      console.warn('Firestore is operating in offline/cached mode. Reconnection attempts are handled automatically.');
     }
   }
 }

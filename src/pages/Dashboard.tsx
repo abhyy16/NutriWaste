@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, limit, where, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, where, deleteDoc, doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Transaction, Menu, Ward, COMSTOCK_VALUES } from '../types';
 import { 
@@ -26,35 +26,47 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const fetchData = async () => {
-    setLoading(true);
-    let q = query(collection(db, 'transactions'));
-    
-    // Always filter by staffId to ensure user sees only their own data
-    if (profile?.id) {
-      q = query(q, where('staffId', '==', profile.id));
-    }
-
-    const tSnap = await getDocs(q);
-    const txs = tSnap.docs.map(d => ({ 
-      id: d.id, 
-      ...d.data(),
-      timestamp: d.data().timestamp?.toDate() 
-    } as Transaction)).sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0));
-    
-    setTransactions(txs);
-
-    const mSnap = await getDocs(collection(db, 'menus'));
-    setMenus(mSnap.docs.map(d => ({ id: d.id, ...d.data() } as Menu)));
-
-    const wSnap = await getDocs(collection(db, 'wards'));
-    setWards(wSnap.docs.map(d => ({ id: d.id, ...d.data() } as Ward)));
-    
-    setLoading(false);
-  };
+  const [selectedWard, setSelectedWard] = useState<string>('all');
 
   useEffect(() => {
-    fetchData();
+    setLoading(true);
+
+    // Real-time listener for menus
+    const unsubMenus = onSnapshot(collection(db, 'menus'), (snap) => {
+      setMenus(snap.docs.map(d => ({ id: d.id, ...d.data() } as Menu)));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, 'menus');
+    });
+
+    // Real-time listener for wards
+    const unsubWards = onSnapshot(collection(db, 'wards'), (snap) => {
+      setWards(snap.docs.map(d => ({ id: d.id, ...d.data() } as Ward)));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, 'wards');
+    });
+
+    // Real-time listener for transactions
+    const q = query(collection(db, 'transactions'));
+    const unsubTransactions = onSnapshot(q, (snap) => {
+      const txs = snap.docs.map(d => ({ 
+        id: d.id, 
+        ...d.data(),
+        timestamp: d.data().timestamp?.toDate() 
+      } as Transaction)).sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0));
+      
+      setTransactions(txs);
+      setLoading(false);
+    }, (err) => {
+      setError(err.message || 'Gagal menyinkronkan data.');
+      handleFirestoreError(err, OperationType.GET, 'transactions');
+      setLoading(false);
+    });
+
+    return () => {
+      unsubMenus();
+      unsubWards();
+      unsubTransactions();
+    };
   }, [profile]);
 
   const handleDelete = async (id: string) => {
@@ -96,6 +108,7 @@ export default function Dashboard() {
         patientGender: editingTx.patientGender,
         wardId: editingTx.wardId,
         menuId: editingTx.menuId,
+        foodType: editingTx.foodType || 'Makanan Pokok',
         comstockScale: editingTx.comstockScale,
         wasteWeight,
         consumptionWeight,
@@ -103,7 +116,6 @@ export default function Dashboard() {
       });
 
       setEditingTx(null);
-      fetchData();
     } catch (err: any) {
       setError(err.message || 'Gagal memperbarui data.');
       handleFirestoreError(err, OperationType.UPDATE, `transactions/${editingTx.id}`);
@@ -111,19 +123,21 @@ export default function Dashboard() {
   };
 
   // Logical Helpers
-  const avgWaste = transactions.length > 0 
-    ? (transactions.reduce((acc, curr) => acc + curr.wasteWeight, 0) / transactions.reduce((acc, curr) => {
+  const displayedTransactions = transactions.filter(t => selectedWard === 'all' || t.wardId === selectedWard);
+
+  const avgWaste = displayedTransactions.length > 0 
+    ? (displayedTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0) / displayedTransactions.reduce((acc, curr) => {
         // Fallback weight if menu details are missing weight
         return acc + 400; 
       }, 0)) * 100 
     : 0;
 
-  const totalPatients = new Set(transactions.map(t => t.patientName)).size;
+  const totalPatients = new Set(displayedTransactions.map(t => t.patientName)).size;
 
   // Chart Data: Waste by Day (Last 7 Days)
   const last7DaysData = Array.from({ length: 7 }).map((_, i) => {
     const date = subDays(new Date(), i);
-    const dayTransactions = transactions.filter(t => 
+    const dayTransactions = displayedTransactions.filter(t => 
       t.timestamp && format(t.timestamp, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
     );
     
@@ -139,7 +153,7 @@ export default function Dashboard() {
   // Chart Data: Waste by Meal Time
   const mealTimes = ['sarapan', 'selingan_1', 'makan_siang', 'selingan_2', 'makan_malam'];
   const mealTimeData = mealTimes.map(m => {
-    const mtTransactions = transactions.filter(t => t.mealTime === m);
+    const mtTransactions = displayedTransactions.filter(t => t.mealTime === m);
     const totalWaste = mtTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
     const totalServed = mtTransactions.length * 400;
 
@@ -149,8 +163,30 @@ export default function Dashboard() {
     };
   });
 
+  // Chart Data: Waste by Food Type
+  const foodTypesList = [
+    'Makanan Pokok',
+    'Lauk Hewani',
+    'Lauk Nabati',
+    'Sayuran',
+    'Buah / Selingan',
+    'Semua (Komposit)'
+  ];
+
+  const foodTypeData = foodTypesList.map(fType => {
+    const fTransactions = displayedTransactions.filter(t => (t.foodType || 'Makanan Pokok') === fType);
+    const totalWaste = fTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
+    const totalServed = fTransactions.length * 400;
+
+    return {
+      name: fType,
+      value: totalServed > 0 ? Number(((totalWaste / totalServed) * 100).toFixed(1)) : 0,
+      count: fTransactions.length
+    };
+  });
+
   // Alarms: Transactions with > 20% waste (Simplified as menus are cyclical now)
-  const menuAlerts = transactions.filter(t => {
+  const menuAlerts = displayedTransactions.filter(t => {
      const scale = COMSTOCK_VALUES.find(v => v.scale === t.comstockScale);
      return scale && scale.percentage > 20;
   }).slice(0, 5);
@@ -182,38 +218,42 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-[2.5rem] border border-slate-200">
-        <div className="flex items-center gap-4">
-          <Link to="/profile" className="relative group">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-black text-2xl border-4 border-white shadow-lg overflow-hidden group-hover:ring-4 group-hover:ring-emerald-50 transition-all">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-gradient-to-r from-emerald-950 via-[#064e3b] to-teal-950 p-6 md:p-8 rounded-[2.5rem] border border-emerald-900/40 shadow-xl shadow-emerald-950/20 overflow-hidden relative group">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_-20%,rgba(16,185,129,0.15),transparent_60%)] pointer-events-none" />
+        <div className="absolute -left-6 -bottom-6 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+        
+        <div className="flex items-center gap-4 relative z-10">
+          <Link to="/profile" className="relative group/avatar">
+            <div className="w-18 h-18 rounded-2xl bg-white/10 flex items-center justify-center text-white font-display font-black text-2xl border-2 border-white/20 shadow-lg overflow-hidden group-hover/avatar:ring-4 group-hover/avatar:ring-emerald-500/30 transition-all">
               {profile?.photoURL ? (
                 <img src={profile.photoURL} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                profile?.name.charAt(0)
+                profile?.name.substring(0, 2).toUpperCase() || 'UN'
               )}
             </div>
-            <div className="absolute -bottom-1 -right-1 p-1 bg-emerald-600 text-white rounded-lg border-2 border-white">
-              <User size={12} />
+            <div className="absolute -bottom-1 -right-1 p-1.5 bg-emerald-500 text-white rounded-xl border border-emerald-950 shadow">
+              <User size={10} strokeWidth={3} />
             </div>
           </Link>
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Selamat Datang,</p>
-            <h2 className="text-2xl font-black text-slate-900 leading-none">{profile?.name}</h2>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[10px] font-black uppercase tracking-tighter">{profile?.role}</span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">NIP: {profile?.nip}</span>
+            <p className="text-xs font-bold text-emerald-400 font-display uppercase tracking-widest leading-none mb-1.5">Selamat Datang,</p>
+            <h2 className="text-2xl font-display font-black text-white leading-tight tracking-tight">{profile?.name}</h2>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className="px-2.5 py-0.5 bg-emerald-500/15 border border-emerald-500/20 text-emerald-300 rounded-lg text-[9px] font-extrabold uppercase tracking-widest">{profile?.role || 'Staff'}</span>
+              <span className="text-[10px] text-emerald-200/50 font-bold uppercase tracking-widest">NIP. {profile?.nip || '-'}</span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        
+        <div className="flex items-center gap-4 relative z-10">
           <div className="text-right hidden sm:block">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{format(new Date(), 'EEEE')}</p>
-            <p className="text-sm font-black text-slate-900">{format(new Date(), 'dd MMMM yyyy')}</p>
+            <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-0.5 font-display">{format(new Date(), 'EEEE')}</p>
+            <p className="text-sm font-display font-black text-white tracking-wide">{format(new Date(), 'dd MMMM yyyy')}</p>
           </div>
-          <div className="w-px h-8 bg-slate-100 hidden sm:block mx-2" />
-          <Link to="/record" className="px-6 py-4 bg-emerald-600 text-white rounded-2xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100">
-            <Utensils size={18} />
-            Input Sisa Makan
+          <div className="w-px h-10 bg-white/10 hidden sm:block mx-2" />
+          <Link to="/record" className="px-7 py-3.5 bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 rounded-2xl font-display font-extrabold text-sm tracking-wide flex items-center gap-2 px-6 py-4 bg-emerald-600 hover:scale-[1.03] active:scale-[0.98] hover:shadow-lg hover:shadow-emerald-400/20 transition-all duration-300">
+            <Utensils size={16} strokeWidth={3} />
+            <span>Input Sisa Makan</span>
           </Link>
         </div>
       </div>
@@ -224,9 +264,19 @@ export default function Dashboard() {
           <p className="text-slate-500">Analisis sisa makanan real-time dan KPI Rumah Sakit</p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all">
-            <Filter size={16} /> Filter
-          </button>
+          <div className="relative">
+            <select
+              value={selectedWard}
+              onChange={(e) => setSelectedWard(e.target.value)}
+              className="appearance-none flex items-center gap-2 pl-10 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all cursor-pointer outline-none focus:ring-2 focus:ring-emerald-100"
+            >
+              <option value="all">Semua Bangsal</option>
+              {wards.map(w => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+            <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          </div>
           <Link 
             to="/reports"
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
@@ -247,7 +297,7 @@ export default function Dashboard() {
         />
         <StatCard 
           title="Records" 
-          value={transactions.length} 
+          value={displayedTransactions.length} 
           subText="30 Days" 
           icon={Utensils} 
         />
@@ -332,15 +382,15 @@ export default function Dashboard() {
       </div>
 
       {/* Additional Admin Stats for Today */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm animate-fade-in">
            <h3 className="font-bold text-slate-800 text-lg mb-6 flex items-center gap-2">
              <Clock className="text-emerald-600" size={20} />
              Ringkasan Hari Ini ({format(new Date(), 'dd MMM')})
            </h3>
            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {mealTimes.map(mt => {
-                const todayTxs = transactions.filter(t => 
+                const todayTxs = displayedTransactions.filter(t => 
                   t.mealTime === mt && 
                   t.timestamp && 
                   format(t.timestamp, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
@@ -393,6 +443,31 @@ export default function Dashboard() {
               })}
            </div>
         </div>
+
+        <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm animate-fade-in">
+           <h3 className="font-bold text-slate-800 text-lg mb-6 flex items-center gap-2">
+             <Utensils className="text-emerald-600" size={20} />
+             Waste per Jenis Makanan
+           </h3>
+           <div className="space-y-3">
+              {foodTypeData.map(item => {
+                 return (
+                   <div key={item.name} className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-slate-600">{item.name} <span className="text-[9px] text-slate-400 font-normal">({item.count} entri)</span></span>
+                        <span className={item.value > 20 ? 'text-red-500' : 'text-emerald-600'}>{item.value.toFixed(1)}%</span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                         <div 
+                           className={`h-full rounded-full transition-all duration-500 ${item.value > 20 ? 'bg-red-500' : 'bg-emerald-500'}`}
+                           style={{ width: `${Math.min(item.value, 100)}%` }}
+                         />
+                      </div>
+                   </div>
+                 );
+              })}
+           </div>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
@@ -434,7 +509,7 @@ export default function Dashboard() {
             </div>
             
             <div className="space-y-4">
-              {transactions.slice(0, 10).map(t => {
+              {displayedTransactions.slice(0, 10).map(t => {
                 const menu = menus.find(m => m.id === t.menuId);
                 const ward = wards.find(w => w.id === t.wardId);
                 const isOwner = profile?.id === t.staffId;
@@ -448,7 +523,10 @@ export default function Dashboard() {
                     <div className="flex-1 overflow-hidden text-left">
                       <div className="flex items-center justify-between">
                         <p className="font-bold text-slate-800 truncate">{t.patientName}</p>
-                        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md uppercase tracking-tight">{t.dietType || 'Biasa'}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md uppercase tracking-tight">{t.dietType || 'Biasa'}</span>
+                          <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 flex-nowrap py-0.5 rounded-md uppercase tracking-tight truncate max-w-[80px] sm:max-w-none">{t.foodType || 'Makanan Pokok'}</span>
+                        </div>
                       </div>
                       <p className="text-xs text-slate-400">
                         {ward?.name} 
@@ -584,6 +662,27 @@ export default function Dashboard() {
                   </div>
 
                   <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase">Jenis Makanan</label>
+                    <select 
+                      value={editingTx.foodType || 'Makanan Pokok'}
+                      onChange={e => setEditingTx({...editingTx, foodType: e.target.value})}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 outline-none font-bold text-slate-700"
+                      required
+                    >
+                      {[
+                        'Makanan Pokok',
+                        'Lauk Hewani',
+                        'Lauk Nabati',
+                        'Sayuran',
+                        'Buah / Selingan',
+                        'Semua (Komposit)'
+                      ].map(fType => (
+                        <option key={fType} value={fType}>{fType}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-400 uppercase">Skala Comstock (Sisa)</label>
                     <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                        {COMSTOCK_VALUES.map(v => (
@@ -646,27 +745,30 @@ export default function Dashboard() {
 function StatCard({ title, value, subText, icon: Icon, trend }: any) {
   return (
     <motion.div 
-      whileHover={{ y: -5 }}
-      className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm"
+      whileHover={{ y: -5, scale: 1.02 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+      className="bg-white p-6 rounded-[2rem] border border-slate-200/80 shadow-[0_10px_30px_-15px_rgba(148,163,184,0.12)] relative overflow-hidden group transition-all duration-300 hover:shadow-[0_20px_45px_-12px_rgba(16,185,129,0.1)] hover:border-emerald-300"
     >
+      <div className="absolute right-0 top-0 w-24 h-24 bg-gradient-to-br from-emerald-500/5 to-teal-500/10 rounded-full blur-2xl translate-x-8 -translate-y-8 group-hover:scale-150 transition-transform duration-500 pointer-events-none" />
+      
       <div className="flex justify-between items-start mb-4">
-        <div className="p-3 bg-slate-50 rounded-2xl text-slate-500">
-          <Icon size={24} />
+        <div className="p-3 bg-gradient-to-b from-[#fafbfe] to-[#f1f5f9] rounded-2xl text-slate-500 border border-slate-200/60 group-hover:from-emerald-50 group-hover:to-teal-50 group-hover:text-emerald-600 group-hover:border-emerald-100 transition-all duration-300 shadow-sm">
+          <Icon size={20} className="transition-transform duration-300 group-hover:rotate-12" />
         </div>
         {trend && (
-          <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${
-            trend === 'good' ? 'bg-emerald-100 text-emerald-600' : 
-            trend === 'bad' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-400'
+          <span className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg ${
+            trend === 'good' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-600' : 
+            trend === 'bad' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-600' : 'bg-slate-500/10 border border-slate-500/20 text-slate-500'
           }`}>
-            {trend === 'good' ? 'Stable' : trend === 'bad' ? 'Warning' : 'Normal'}
+            {trend === 'good' ? 'Aman' : trend === 'bad' ? 'Waspada' : 'Stabil'}
           </span>
         )}
       </div>
-      <h4 className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-1">{title}</h4>
+      <h4 className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1 font-display">{title}</h4>
       <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-black text-slate-900">{value}</span>
+        <span className="text-3xl font-display font-black text-slate-800 tracking-tight">{value}</span>
       </div>
-      <p className="text-xs text-slate-400 mt-2 font-medium">{subText}</p>
+      <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-wider">{subText}</p>
     </motion.div>
   );
 }
