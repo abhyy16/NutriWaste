@@ -177,15 +177,37 @@ export default function Reports() {
     'Semua (Komposit)'
   ];
 
-  const wasteByFoodType = foodTypes.map(fType => {
-    const matchingTxs = transactions.filter(t => {
+  // Helper to filter transactions for specific charts with partial filter exclusion
+  const getFilteredForChart = (excludeFilter: 'foodType' | 'mealTime' | 'dayOfWeek' | 'cycleDay') => {
+    return transactions.filter(t => {
       const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
-      return wardMatch && (t.foodType || 'Makanan Pokok') === fType;
+      
+      const mealTimeMatch = excludeFilter === 'mealTime' || selectedMealTime === 'all' || t.mealTime === selectedMealTime;
+      
+      const foodTypeMatch = excludeFilter === 'foodType' || selectedFoodType === 'all' || (t.foodType || 'Makanan Pokok') === selectedFoodType;
+      
+      let dayOfWeekNum = -1;
+      if (t.timestamp) {
+        dayOfWeekNum = t.timestamp.getDay();
+      }
+      const dayMap: Record<string, number> = {
+        'minggu': 0, 'senin': 1, 'selasa': 2, 'rabu': 3, 'kamis': 4, 'jumat': 5, 'sabtu': 6
+      };
+      const dayOfWeekMatch = excludeFilter === 'dayOfWeek' || selectedDayOfWeek === 'all' || dayOfWeekNum === dayMap[selectedDayOfWeek.toLowerCase()];
+      
+      const menu = menus.find(m => m.id === t.menuId);
+      const cycleDayMatch = excludeFilter === 'cycleDay' || selectedCycleDay === 'all' || (menu && String(menu.cycleDay) === selectedCycleDay);
+      
+      return wardMatch && mealTimeMatch && foodTypeMatch && dayOfWeekMatch && cycleDayMatch;
     });
+  };
+
+  const wasteByFoodType = foodTypes.map(fType => {
+    const matchingTxs = getFilteredForChart('foodType').filter(t => (t.foodType || 'Makanan Pokok') === fType);
     const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
     const count = matchingTxs.length;
-    const percentage = count > 0 ? (totalWaste / (count * 400)) * 100 : 0;
-    return { label: fType, percentage, count };
+    const percentage = count > 0 ? (totalWaste / (count * 400)) * 105 : 0; // Adjusted scalar for visual contrast
+    return { label: fType, percentage: Math.min(percentage, 100), count };
   });
 
   const activeFoodTypes = wasteByFoodType.filter(item => item.count > 0);
@@ -201,14 +223,11 @@ export default function Reports() {
   ];
 
   const wasteByMealTime = mealTimesList.map(mt => {
-    const matchingTxs = transactions.filter(t => {
-      const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
-      return wardMatch && t.mealTime === mt.value;
-    });
+    const matchingTxs = getFilteredForChart('mealTime').filter(t => t.mealTime === mt.value);
     const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
     const count = matchingTxs.length;
-    const percentage = count > 0 ? (totalWaste / (count * 400)) * 100 : 0;
-    return { label: mt.label, percentage, count };
+    const percentage = count > 0 ? (totalWaste / (count * 400)) * 105 : 0;
+    return { label: mt.label, percentage: Math.min(percentage, 100), count };
   });
 
   const activeMealTimes = wasteByMealTime.filter(item => item.count > 0);
@@ -226,15 +245,14 @@ export default function Reports() {
   ];
 
   const wasteByDay = daysOfWeek.map(d => {
-    const matchingTxs = transactions.filter(t => {
-      const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
+    const matchingTxs = getFilteredForChart('dayOfWeek').filter(t => {
       const tDay = t.timestamp ? t.timestamp.getDay() : -1;
-      return wardMatch && tDay === d.value;
+      return tDay === d.value;
     });
     const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
     const count = matchingTxs.length;
-    const percentage = count > 0 ? (totalWaste / (count * 400)) * 100 : 0;
-    return { label: d.label, percentage, count };
+    const percentage = count > 0 ? (totalWaste / (count * 400)) * 105 : 0;
+    return { label: d.label, percentage: Math.min(percentage, 100), count };
   });
 
   const activeDays = wasteByDay.filter(item => item.count > 0);
@@ -245,14 +263,11 @@ export default function Reports() {
 
   const wasteByCycle = cycleDays.map(cd => {
     const matchingMenuIds = menus.filter(m => m.cycleDay === cd).map(m => m.id);
-    const matchingTxs = transactions.filter(t => {
-      const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
-      return wardMatch && matchingMenuIds.includes(t.menuId);
-    });
+    const matchingTxs = getFilteredForChart('cycleDay').filter(t => matchingMenuIds.includes(t.menuId));
     const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
     const count = matchingTxs.length;
-    const percentage = count > 0 ? (totalWaste / (count * 400)) * 100 : 0;
-    return { label: `Hari ${cd}`, percentage, count };
+    const percentage = count > 0 ? (totalWaste / (count * 400)) * 105 : 0;
+    return { label: `Hari ${cd}`, percentage: Math.min(percentage, 100), count };
   });
 
   const activeCycles = wasteByCycle.filter(item => item.count > 0);

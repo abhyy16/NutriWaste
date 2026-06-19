@@ -38,7 +38,7 @@ export default function Layout() {
     { name: 'Input Sisa Makan', path: '/record', icon: PlusCircle },
     { name: 'Laporan', path: '/reports', icon: FileText },
     ...(isAdmin ? [
-      { name: 'Master Menu', path: '/menu-cycle', icon: Utensils },
+      { name: 'Siklus Menu', path: '/menu-cycle', icon: Utensils },
       { name: 'Data Master', path: '/master', icon: Database },
     ] : []),
   ];

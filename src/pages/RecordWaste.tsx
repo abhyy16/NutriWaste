@@ -32,11 +32,71 @@ export default function RecordWaste() {
   const [wardId, setWardId] = useState(profile?.assignedWardId || '');
   const [cycleDay, setCycleDay] = useState<number>(1);
   const [mealTime, setMealTime] = useState<MealTime>('sarapan');
-  const [foodType, setFoodType] = useState('Makanan Pokok');
   const [menuId, setMenuId] = useState('');
   const [foodItems, setFoodItems] = useState('');
-  const [selectedScale, setSelectedScale] = useState<number | null>(null);
   const [reason, setReason] = useState('');
+
+  // Multi-Record food items and scales state
+  const [foodRecords, setFoodRecords] = useState<Record<string, { menuName: string, comstockScale: number | null }>>({
+    'Makanan Pokok': { menuName: '', comstockScale: null },
+    'Lauk Hewani': { menuName: '', comstockScale: null },
+    'Lauk Nabati': { menuName: '', comstockScale: null },
+    'Sayuran': { menuName: '', comstockScale: null },
+    'Buah / Selingan': { menuName: '', comstockScale: null },
+    'Semua (Komposit)': { menuName: '', comstockScale: null },
+  });
+
+  // Helper parsing comma-separated menu cycle items into categories
+  const parseFoodItems = (foodItemsStr: string) => {
+    const parts = foodItemsStr.split(',').map(s => s.trim()).filter(Boolean);
+    const result = {
+      'Makanan Pokok': '',
+      'Lauk Hewani': '',
+      'Lauk Nabati': '',
+      'Sayuran': '',
+      'Buah / Selingan': '',
+      'Semua (Komposit)': ''
+    };
+
+    parts.forEach(part => {
+      const lower = part.toLowerCase();
+      if (lower.includes('nasi') || lower.includes('kentang') || lower.includes('bubur') || lower.includes('mie') || lower.includes('roti') || lower.includes('singkong') || lower.includes('biun') || lower.includes('terigu') || lower.includes('beras')) {
+        result['Makanan Pokok'] = result['Makanan Pokok'] ? `${result['Makanan Pokok']}, ${part}` : part;
+      } else if (lower.includes('ayam') || lower.includes('daging') || lower.includes('sapi') || lower.includes('ikan') || lower.includes('telur') || lower.includes('nila') || lower.includes('bandeng') || lower.includes('sosis') || lower.includes('udang') || lower.includes('teri') || lower.includes('hati') || lower.includes('otak')) {
+        result['Lauk Hewani'] = result['Lauk Hewani'] ? `${result['Lauk Hewani']}, ${part}` : part;
+      } else if (lower.includes('tempe') || lower.includes('tahu') || lower.includes('kacang')) {
+        if (lower.includes('panjang') || lower.includes('tauge') || lower.includes('sayur')) {
+          result['Sayuran'] = result['Sayuran'] ? `${result['Sayuran']}, ${part}` : part;
+        } else {
+          result['Lauk Nabati'] = result['Lauk Nabati'] ? `${result['Lauk Nabati']}, ${part}` : part;
+        }
+      } else if (lower.includes('bayam') || lower.includes('sayur') || lower.includes('sop') || lower.includes('kol') || lower.includes('kangkung') || lower.includes('wortel') || lower.includes('sawi') || lower.includes('selada') || lower.includes('tumis') || lower.includes('timun') || lower.includes('terong') || lower.includes('kembang kol') || lower.includes('bung')) {
+        result['Sayuran'] = result['Sayuran'] ? `${result['Sayuran']}, ${part}` : part;
+      } else {
+        result['Buah / Selingan'] = result['Buah / Selingan'] ? `${result['Buah / Selingan']}, ${part}` : part;
+      }
+    });
+
+    return result;
+  };
+
+  const updateMenuName = (fType: string, val: string) => {
+    setFoodRecords(prev => ({
+      ...prev,
+      [fType]: { ...prev[fType], menuName: val }
+    }));
+  };
+
+  const handleScaleClick = (fType: string, scale: number) => {
+    setFoodRecords(prev => {
+      const currentScale = prev[fType].comstockScale;
+      const nextScale = currentScale === scale ? null : scale;
+      return {
+        ...prev,
+        [fType]: { ...prev[fType], comstockScale: nextScale }
+      };
+    });
+  };
 
   const REASONS = [
     'Pasien tidak nafsu makan',
@@ -82,6 +142,30 @@ export default function RecordWaste() {
     }
   }, [cycleDay, mealTime, menus]);
 
+  // Update categories when foodItems (Menu) changes
+  useEffect(() => {
+    if (foodItems) {
+      const parsed = parseFoodItems(foodItems);
+      setFoodRecords({
+        'Makanan Pokok': { menuName: parsed['Makanan Pokok'] || '', comstockScale: null },
+        'Lauk Hewani': { menuName: parsed['Lauk Hewani'] || '', comstockScale: null },
+        'Lauk Nabati': { menuName: parsed['Lauk Nabati'] || '', comstockScale: null },
+        'Sayuran': { menuName: parsed['Sayuran'] || '', comstockScale: null },
+        'Buah / Selingan': { menuName: parsed['Buah / Selingan'] || '', comstockScale: null },
+        'Semua (Komposit)': { menuName: 'Menu Komposit / Campuran', comstockScale: null },
+      });
+    } else {
+      setFoodRecords({
+        'Makanan Pokok': { menuName: '', comstockScale: null },
+        'Lauk Hewani': { menuName: '', comstockScale: null },
+        'Lauk Nabati': { menuName: '', comstockScale: null },
+        'Sayuran': { menuName: '', comstockScale: null },
+        'Buah / Selingan': { menuName: '', comstockScale: null },
+        'Semua (Komposit)': { menuName: '', comstockScale: null },
+      });
+    }
+  }, [foodItems]);
+
   // Sync ward from profile if available
   useEffect(() => {
     if (profile?.assignedWardId && !wardId) {
@@ -98,46 +182,50 @@ export default function RecordWaste() {
   };
 
   const handleSubmit = async () => {
-    if (!profile || selectedScale === null || !wardId || !patientName) return;
+    if (!profile || !wardId || !patientName) return;
     
-    setIsSubmitting(true);
-    setError(null);
-
-    const scale = COMSTOCK_VALUES.find(v => v.scale === selectedScale);
-    if (!scale) {
-      setError('Skala Comstock tidak valid');
-      setIsSubmitting(false);
+    // Check if at least one scale is selected
+    const activeRecords = Object.entries(foodRecords).filter(([_, data]) => data.comstockScale !== null);
+    if (activeRecords.length === 0) {
+      setError('Mohon pilih skala Comstock minimal untuk salah satu jenis makanan.');
       return;
     }
 
-    // Default standard weight if not specified
-    const standardWeight = 400; 
-    const wasteWeight = standardWeight * (scale.percentage / 100);
-    const consumptionWeight = standardWeight - wasteWeight;
+    setIsSubmitting(true);
+    setError(null);
 
     try {
-      await addDoc(collection(db, 'transactions'), {
-        patientName,
-        patientAge: Number(patientAge) || 0,
-        patientGender,
-        wardId,
-        roomNumber,
-        bedNumber,
-        staffInCharge,
-        dietType,
-        mealTime,
-        foodType,
-        menuId: menuId || 'manual',
-        comstockScale: selectedScale,
-        wasteWeight,
-        consumptionWeight,
-        reason: reason || null,
-        staffId: profile.id,
-        staffName: profile.name,
-        timestamp: serverTimestamp()
-      }).catch(err => {
-        handleFirestoreError(err, OperationType.CREATE, 'transactions');
+      const promises = activeRecords.map(([fType, data]) => {
+        const scaleObj = COMSTOCK_VALUES.find(v => v.scale === data.comstockScale);
+        const standardWeight = 400; // default standard weight
+        const wasteWeight = scaleObj ? (standardWeight * (scaleObj.percentage / 100)) : 0;
+        const consumptionWeight = standardWeight - wasteWeight;
+
+        return addDoc(collection(db, 'transactions'), {
+          patientName,
+          patientAge: Number(patientAge) || 0,
+          patientGender,
+          wardId,
+          roomNumber,
+          bedNumber,
+          staffInCharge,
+          dietType,
+          mealTime,
+          foodType: fType, // e.g., 'Makanan Pokok', 'Lauk Hewani', etc.
+          menuId: menuId || 'manual',
+          comstockScale: data.comstockScale,
+          wasteWeight,
+          consumptionWeight,
+          reason: reason || null,
+          staffId: profile.id,
+          staffName: profile.name,
+          timestamp: serverTimestamp()
+        }).catch(err => {
+          handleFirestoreError(err, OperationType.CREATE, 'transactions');
+        });
       });
+
+      await Promise.all(promises);
 
       setShowSuccess(true);
       confetti({
@@ -152,7 +240,7 @@ export default function RecordWaste() {
       }, 2000);
     } catch (err: any) {
       console.error('Error adding document: ', err);
-      setError(err.message || 'Gagal menyimpan data. Pastikan koneksi internet stabil.');
+      setError(err.message || 'Gagal menyimpan data sisa. Pastikan koneksi internet stabil.');
     } finally {
       setIsSubmitting(false);
     }
@@ -169,9 +257,15 @@ export default function RecordWaste() {
     // Ward is kept for session persistence
     setMenuId('');
     setFoodItems('');
-    setFoodType('Makanan Pokok');
-    setSelectedScale(null);
     setReason('');
+    setFoodRecords({
+      'Makanan Pokok': { menuName: '', comstockScale: null },
+      'Lauk Hewani': { menuName: '', comstockScale: null },
+      'Lauk Nabati': { menuName: '', comstockScale: null },
+      'Sayuran': { menuName: '', comstockScale: null },
+      'Buah / Selingan': { menuName: '', comstockScale: null },
+      'Semua (Komposit)': { menuName: '', comstockScale: null },
+    });
     setStep(1);
   };
 
@@ -413,29 +507,6 @@ export default function RecordWaste() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Jenis Makanan</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-100 p-1.5 rounded-2xl">
-                    {[
-                      'Makanan Pokok',
-                      'Lauk Hewani',
-                      'Lauk Nabati',
-                      'Sayuran',
-                      'Buah / Selingan',
-                      'Semua (Komposit)'
-                    ].map(fType => (
-                      <button
-                        key={fType}
-                        type="button"
-                        onClick={() => setFoodType(fType)}
-                        className={`py-3 text-[10px] font-black rounded-xl transition-all ${foodType === fType ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                      >
-                        {fType.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Detail Menu Terdeteksi</label>
                   <textarea
                     value={foodItems}
@@ -444,7 +515,7 @@ export default function RecordWaste() {
                     className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-600 min-h-[80px] text-sm italic bg-slate-50/50"
                   />
                   {!foodItems && (
-                    <p className="text-[10px] text-amber-600 font-bold italic ml-1">* Menu belum diatur di Master Menu Siklus</p>
+                    <p className="text-[10px] text-amber-600 font-bold italic ml-1">* Menu belum diatur di Siklus Menu</p>
                   )}
                 </div>
               </div>
@@ -467,65 +538,109 @@ export default function RecordWaste() {
             exit={{ opacity: 0, x: -20 }}
             className="space-y-6"
           >
-            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden">
-               <div className="flex items-center justify-between mb-8">
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2 text-xl">
-                    Skala Comstock
+            <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-xl">
+                    Skala Comstock Sisa Makanan
                   </h3>
-                  <button onClick={() => setStep(1)} className="text-emerald-600 text-sm font-bold bg-emerald-50 px-4 py-2 rounded-full">Ubah Info</button>
-               </div>
+                  <p className="text-xs text-slate-400 font-bold italic mt-0.5">Pilih sisa makanan per kategori dalam sekali input</p>
+                </div>
+                <button 
+                  onClick={() => setStep(1)} 
+                  className="text-emerald-600 text-xs font-black bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-full transition-all"
+                >
+                  Ubah Info Pasien
+                </button>
+              </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                 {COMSTOCK_REFERENCE.map((v) => (
-                   <button
-                    key={v.scale}
-                    type="button"
-                    onClick={() => setSelectedScale(v.scale)}
-                    className={`
-                      relative p-5 rounded-[2rem] border-2 transition-all duration-300 flex flex-col items-center gap-2.5 text-center group cursor-pointer
-                      ${selectedScale === v.scale 
-                        ? 'border-emerald-500 bg-gradient-to-b from-emerald-50/50 to-teal-50/10 text-emerald-700 shadow-md shadow-emerald-500/5 ring-4 ring-emerald-100' 
-                        : 'border-slate-200 bg-[#fbfcfd] hover:border-slate-300 hover:bg-slate-50 text-slate-500'}
-                    `}
-                   >
-                     <div className="transition-all duration-300 group-hover:scale-105">
-                       <ComstockAnimation scale={v.scale} isActive={selectedScale === v.scale} />
-                     </div>
-                     <span className="text-[9.5px] font-black uppercase tracking-wider leading-tight px-1 font-display">{v.desc}</span>
-                     {selectedScale === v.scale && (
-                       <div className="absolute top-3 right-3">
-                         <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full p-1 shadow shadow-emerald-500/20 ring-4 ring-white">
-                            <CheckCircle2 size={10} className="text-white fill-white" />
-                         </div>
-                       </div>
-                     )}
-                   </button>
-                 ))}
-               </div>
+              {/* Multi-category list stack */}
+              <div className="space-y-5">
+                {Object.entries(foodRecords).map(([fType, data]) => {
+                  const hasSelectedScale = data.comstockScale !== null;
+                  return (
+                    <div 
+                      key={fType}
+                      className={`p-5 rounded-[2rem] border-2 transition-all duration-300 space-y-4 bg-white ${
+                        hasSelectedScale 
+                          ? 'border-emerald-500 shadow-md shadow-emerald-500/5 ring-4 ring-emerald-50' 
+                          : 'border-slate-100 hover:border-slate-200 shadow-sm'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-xl transition-all ${hasSelectedScale ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                            <UtensilsCrossed size={16} />
+                          </div>
+                          <div>
+                            <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{fType}</span>
+                            <div className="text-[10px] text-slate-400 font-bold italic mt-0.5 leading-none">
+                              {hasSelectedScale ? 'Skala sisa tercatat' : 'Sisa belum diisi / tidak disajikan'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex-1 max-w-sm sm:text-right">
+                          <input
+                            type="text"
+                            value={data.menuName}
+                            onChange={(e) => updateMenuName(fType, e.target.value)}
+                            placeholder="Isi menu hidangan..."
+                            className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 text-xs font-bold text-slate-700 bg-slate-50/50"
+                          />
+                        </div>
+                      </div>
 
-               <div className="mt-8 p-4 bg-slate-50 rounded-2xl border border-slate-100 italic text-[10px] text-slate-500">
-                 * Gunakan gambar di atas sebagai acuan visual estimasi sisa makanan pasien (Metode Comstock).
-               </div>
+                      {/* Comstock horizontal selector buttons */}
+                      <div className="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-2xl">
+                        {COMSTOCK_VALUES.map((v) => {
+                          const isCurrent = data.comstockScale === v.scale;
+                          return (
+                            <button
+                              key={v.scale}
+                              type="button"
+                              onClick={() => handleScaleClick(fType, v.scale)}
+                              className={`flex-1 min-w-[75px] py-4 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-0.5 ${
+                                isCurrent
+                                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/15 scale-[1.03] z-10'
+                                  : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 font-bold'
+                              }`}
+                            >
+                              <span className="text-[11px] leading-tight font-black">{v.percentage}%</span>
+                              <span className="text-[9px] opacity-80 leading-none">
+                                {v.scale === 0 ? 'Habis' : v.scale === 1 ? 'Sisa 1/4' : v.scale === 2 ? 'Sisa 1/2' : v.scale === 3 ? 'Sisa 3/4' : v.scale === 4 ? '95%' : 'Utuh'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-               <div className="mt-8 pt-8 border-t border-slate-100 space-y-4">
-                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                   <ClipboardCheck size={18} className="text-emerald-600" />
-                   Alasan Sisa Makan (Opsional)
-                 </h3>
-                 <div className="relative">
-                   <select
+              <div className="p-4 bg-slate-50 rounded-[2rem] border border-slate-100 italic text-[10px] text-slate-500 text-center">
+                * Pilih dengan menekan skala sisa makan (0% sisa s.d. 100% sisa makanan). Tekan sekali lagi untuk membatalkan seleksi jika jenis makanan tidak disajikan.
+              </div>
+
+              <div className="pt-6 border-t border-slate-100 space-y-3">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <ClipboardCheck size={18} className="text-emerald-600" />
+                  Alasan Sisa Makan (Opsional - Jika ada sisa)
+                </h3>
+                <div className="relative">
+                  <select
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 appearance-none"
-                   >
-                     <option value="">-- Pilih Alasan (Opsional) --</option>
-                     {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-                   </select>
-                   <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                   </div>
-                 </div>
-               </div>
+                  >
+                    <option value="">-- Pilih Alasan (Opsional) --</option>
+                    {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex gap-4">
@@ -538,7 +653,7 @@ export default function RecordWaste() {
               </button>
               <button
                 id="submit-record-btn"
-                disabled={selectedScale === null || isSubmitting}
+                disabled={isSubmitting}
                 onClick={handleSubmit}
                 className="flex-[2] bg-emerald-600 text-white font-black py-4 sm:py-5 rounded-2xl sm:rounded-[2rem] shadow-xl shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
               >
@@ -547,7 +662,7 @@ export default function RecordWaste() {
                 ) : (
                   <>
                     <ClipboardCheck size={20} className="stroke-[3]" />
-                    Simpan Data Sisa
+                    Simpan Semua Sisa
                   </>
                 )}
               </button>

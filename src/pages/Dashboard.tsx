@@ -260,7 +260,7 @@ export default function Dashboard() {
 
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard Ringkasan</h2>
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h2>
           <p className="text-slate-500">Analisis sisa makanan real-time dan KPI Rumah Sakit</p>
         </div>
         <div className="flex gap-2">
@@ -320,7 +320,7 @@ export default function Dashboard() {
         {/* Main Chart */}
         <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="font-bold text-slate-800 text-lg">Tren Persentase Waste</h3>
+            <h3 className="font-bold text-slate-800 text-lg">Analisis Sisa Makanan</h3>
             <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
               <Calendar size={14} /> 7 HARI TERAKHIR
             </div>

@@ -1,17 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
-import { doc, setDoc, serverTimestamp, collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, collection, getDocs, orderBy, query, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { UserCheck, Fingerprint, Building2, AlertCircle, Camera, User } from 'lucide-react';
-import { Ward } from '../types';
+import { UserCheck, Fingerprint, Building2, AlertCircle, Camera, User, ShieldAlert } from 'lucide-react';
+import { Ward, Role } from '../types';
 
 export default function CompleteProfile() {
   const { user, refreshProfile } = useAuth();
   const [name, setName] = useState('');
   const [nip, setNip] = useState('');
   const [wardId, setWardId] = useState('');
+  const [customWardName, setCustomWardName] = useState('');
+  const [role, setRole] = useState<Role>('nutritionist');
   const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [wards, setWards] = useState<Ward[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,7 +32,23 @@ export default function CompleteProfile() {
       const snap = await getDocs(q);
       setWards(snap.docs.map(d => ({ id: d.id, ...d.data() } as Ward)));
     };
+
+    const fetchDraftRole = async () => {
+      if (user) {
+        const { doc, getDoc } = await import('firebase/firestore');
+        const docRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.role) {
+            setRole(data.role);
+          }
+        }
+      }
+    };
+
     fetchWards();
+    fetchDraftRole();
   }, [user]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,18 +77,34 @@ export default function CompleteProfile() {
       return;
     }
 
+    if (wardId === 'other_custom' && !customWardName.trim()) {
+      setError('Mohon isi nama bangsal kustom Anda.');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(user.email || '');
+      let finalWardId = wardId;
+      if (wardId === 'other_custom') {
+        const cleanedName = customWardName.trim();
+        const existing = wards.find(w => w.name.toLowerCase() === cleanedName.toLowerCase());
+        if (existing) {
+          finalWardId = existing.id;
+        } else {
+          const newWardDoc = await addDoc(collection(db, 'wards'), { name: cleanedName });
+          finalWardId = newWardDoc.id;
+        }
+      }
+
       await setDoc(doc(db, 'users', user.uid), {
         name,
         nip,
         email: user.email,
-        assignedWardId: wardId,
+        assignedWardId: finalWardId,
         photoURL: photoURL,
-        role: isAdminEmail ? 'admin' : 'nutritionist',
+        role: role,
         createdAt: serverTimestamp(),
       });
       
@@ -139,6 +173,32 @@ export default function CompleteProfile() {
           </div>
 
           <div className="space-y-5">
+            {/* Role Selection (Read-Only) */}
+            <div className="space-y-1 opacity-80">
+              <div className="flex justify-between items-center px-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Jabatan / Role</label>
+                <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Terkonfirmasi saat Daftar</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 bg-slate-100 p-1 rounded-2xl h-[58px]">
+                <button
+                  type="button"
+                  disabled
+                  className={`flex items-center justify-center gap-1.5 text-xs font-black rounded-xl cursor-not-allowed transition-all ${role === 'admin' ? 'bg-white text-emerald-600 shadow-sm font-bold' : 'text-slate-400 opacity-60'}`}
+                >
+                  <ShieldAlert size={14} />
+                  ADMIN
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  className={`flex items-center justify-center gap-1.5 text-xs font-black rounded-xl cursor-not-allowed transition-all ${role === 'nutritionist' ? 'bg-white text-emerald-600 shadow-sm font-bold' : 'text-slate-400'}`}
+                >
+                  <User size={14} />
+                  PETUGAS GIZI
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Nama Petugas</label>
               <input
@@ -174,10 +234,28 @@ export default function CompleteProfile() {
                 >
                   <option value="">-- Pilih Unit --</option>
                   {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  <option value="other_custom">-- Lainnya (Input Manual) --</option>
                 </select>
                 <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               </div>
             </div>
+
+            {wardId === 'other_custom' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="space-y-1 pt-1"
+              >
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Nama Unit/Bangsal Baru</label>
+                <input
+                  type="text"
+                  value={customWardName}
+                  onChange={(e) => setCustomWardName(e.target.value)}
+                  className="w-full px-4 py-3.5 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-100 outline-none transition-all text-sm font-bold text-slate-700"
+                  placeholder="Cth: Bangsal Seruni"
+                />
+              </motion.div>
+            )}
 
             <button
               type="submit"

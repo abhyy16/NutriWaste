@@ -26,7 +26,7 @@ export default function App() {
                              profile?.role === 'nutritionist' || 
                              ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(user?.email || '');
 
-  const needsProfile = user && !profile;
+  const needsProfile = user && (!profile || !profile.name);
 
   return (
     <Router>
