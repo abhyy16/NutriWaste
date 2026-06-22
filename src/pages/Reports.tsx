@@ -3,7 +3,7 @@ import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Transaction, Menu, Ward } from '../types';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers } from 'lucide-react';
+import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -37,8 +37,8 @@ function MiniBarChartCard({ title, data, maxItem, minItem, icon: Icon }: {
 
       <div className="flex-1 space-y-4 pt-1">
         {data.map((item) => {
-          const isMax = maxItem && maxItem.label === item.label && item.percentage > 0;
-          const isMin = minItem && minItem.label === item.label && item.percentage > 0 && item.percentage !== maxItem?.percentage;
+          const isMax = maxItem && maxItem.label === item.label && item.count > 0;
+          const isMin = minItem && minItem.label === item.label && item.count > 0 && (maxItem ? maxItem.label !== minItem.label : true);
 
           return (
             <div key={item.label} className="space-y-1.5">
@@ -78,7 +78,7 @@ function MiniBarChartCard({ title, data, maxItem, minItem, icon: Icon }: {
         <div className="p-3 rounded-2xl bg-rose-500/5 border border-rose-100">
           <p className="font-extrabold text-rose-500/80 uppercase tracking-widest text-[8.5px] font-display">Sisa Tertinggi</p>
           <p className="font-display font-black text-rose-700 truncate mt-1">
-            {maxItem && maxItem.percentage > 0 
+            {maxItem && maxItem.count > 0 
               ? `${maxItem.label} (${maxItem.percentage.toFixed(1)}%)`
               : 'Tidak ada data'}
           </p>
@@ -86,7 +86,7 @@ function MiniBarChartCard({ title, data, maxItem, minItem, icon: Icon }: {
         <div className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-100">
           <p className="font-extrabold text-emerald-500/80 uppercase tracking-widest text-[8.5px] font-display">Sisa Terendah</p>
           <p className="font-display font-black text-emerald-700 truncate mt-1">
-            {minItem && minItem.percentage > 0 
+            {minItem && minItem.count > 0 
               ? `${minItem.label} (${minItem.percentage.toFixed(1)}%)`
               : 'Tidak ada data'}
           </p>
@@ -108,6 +108,7 @@ export default function Reports() {
   const [selectedFoodType, setSelectedFoodType] = useState<string>('all');
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState<string>('all');
   const [selectedCycleDay, setSelectedCycleDay] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -149,6 +150,7 @@ export default function Reports() {
   }, [selectedMonth]);
 
   const filteredTransactions = transactions.filter(t => {
+    const nameMatch = searchQuery === '' || (t.patientName || '').toLowerCase().includes(searchQuery.toLowerCase());
     const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
     const mealTimeMatch = selectedMealTime === 'all' || t.mealTime === selectedMealTime;
     const foodTypeMatch = selectedFoodType === 'all' || (t.foodType || 'Makanan Pokok') === selectedFoodType;
@@ -165,7 +167,7 @@ export default function Reports() {
     const menu = menus.find(m => m.id === t.menuId);
     const cycleDayMatch = selectedCycleDay === 'all' || (menu && String(menu.cycleDay) === selectedCycleDay);
     
-    return wardMatch && mealTimeMatch && foodTypeMatch && dayOfWeekMatch && cycleDayMatch;
+    return nameMatch && wardMatch && mealTimeMatch && foodTypeMatch && dayOfWeekMatch && cycleDayMatch;
   });
 
   const foodTypes = [
@@ -403,13 +405,29 @@ export default function Reports() {
           <TableIcon size={16} className="text-emerald-600" />
           Filter Laporan
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Berdasarkan Bangsal</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cari Pasien</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari nama pasien..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-750 text-xs sm:text-sm"
+              />
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                <Search size={16} />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Berdasarkan Bangsal</label>
             <select
               value={selectedWard}
               onChange={(e) => setSelectedWard(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-xs sm:text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
             >
               <option value="all">Semua Bangsal</option>
               {wards.map(w => (
@@ -419,11 +437,11 @@ export default function Reports() {
           </div>
           
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Waktu Makan</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Waktu Makan</label>
             <select
               value={selectedMealTime}
               onChange={(e) => setSelectedMealTime(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-xs sm:text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
             >
               <option value="all">Semua Waktu Makan</option>
               <option value="sarapan">Sarapan</option>
@@ -435,11 +453,11 @@ export default function Reports() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Jenis Makanan</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Jenis Makanan</label>
             <select
               value={selectedFoodType}
               onChange={(e) => setSelectedFoodType(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-xs sm:text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
             >
               <option value="all">Semua Jenis</option>
               {foodTypes.map(ft => (
@@ -449,11 +467,11 @@ export default function Reports() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hari</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hari</label>
             <select
               value={selectedDayOfWeek}
               onChange={(e) => setSelectedDayOfWeek(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-xs sm:text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
             >
               <option value="all">Semua Hari</option>
               <option value="Senin">Senin</option>
@@ -467,11 +485,11 @@ export default function Reports() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hari Siklus</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hari Siklus</label>
             <select
               value={selectedCycleDay}
               onChange={(e) => setSelectedCycleDay(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 text-xs sm:text-sm"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
             >
               <option value="all">Semua Siklus</option>
               {Array.from({ length: 10 }, (_, i) => i + 1).map(day => (

@@ -85,7 +85,14 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 export default function MenuCycle() {
-  const [cycleData, setCycleData] = useState<Record<number, Record<string, string>>>({});
+  interface CycleCell {
+    foodItems: string;
+    standarBahan: string;
+    gramasi: string;
+    beratStandar: string;
+  }
+
+  const [cycleData, setCycleData] = useState<Record<number, Record<string, CycleCell>>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
@@ -100,12 +107,19 @@ export default function MenuCycle() {
     try {
       const q = query(collection(db, 'menus'), orderBy('cycleDay'));
       const snap = await getDocs(q);
-      const data: Record<number, Record<string, string>> = {};
+      const data: Record<number, Record<string, CycleCell>> = {};
       
       snap.docs.forEach(d => {
-        const menu = d.data() as Menu;
-        if (!data[menu.cycleDay]) data[menu.cycleDay] = {};
-        data[menu.cycleDay][menu.mealTime] = menu.foodItems;
+        const menu = d.data();
+        const day = menu.cycleDay;
+        const mealTime = menu.mealTime;
+        if (!data[day]) data[day] = {};
+        data[day][mealTime] = {
+          foodItems: menu.foodItems || '',
+          standarBahan: menu.standarBahan || '',
+          gramasi: menu.gramasi || '',
+          beratStandar: menu.beratStandar || '400',
+        };
       });
 
       setCycleData(data);
@@ -120,14 +134,21 @@ export default function MenuCycle() {
     fetchMenuCycle();
   }, []);
 
-  const handleCellChange = (day: number, mealTime: string, value: string) => {
-    setCycleData(prev => ({
-      ...prev,
-      [day]: {
-        ...(prev[day] || {}),
-        [mealTime]: value
-      }
-    }));
+  const handleCellFieldChange = (day: number, mealTime: string, field: keyof CycleCell, value: string) => {
+    setCycleData(prev => {
+      const dayData = prev[day] || {};
+      const cellData = dayData[mealTime] || { foodItems: '', standarBahan: '', gramasi: '', beratStandar: '' };
+      return {
+        ...prev,
+        [day]: {
+          ...dayData,
+          [mealTime]: {
+            ...cellData,
+            [field]: value
+          }
+        }
+      };
+    });
   };
 
   const saveCycle = async () => {
@@ -136,13 +157,16 @@ export default function MenuCycle() {
       const promises = [];
       for (const day of DAYS) {
         for (const meal of MEAL_TIMES) {
-          const foodItems = cycleData[day]?.[meal.id] || '';
+          const cell = cycleData[day]?.[meal.id] || { foodItems: '', standarBahan: '', gramasi: '', beratStandar: '200' };
           const menuId = `day_${day}_${meal.id}`;
           promises.push(
             setDoc(doc(db, 'menus', menuId), {
               cycleDay: day,
               mealTime: meal.id,
-              foodItems: foodItems,
+              foodItems: cell.foodItems || '',
+              standarBahan: cell.standarBahan || '',
+              gramasi: cell.gramasi || '',
+              beratStandar: cell.beratStandar || '200',
               updatedBy: auth.currentUser?.uid,
               updatedAt: serverTimestamp()
             })
@@ -161,7 +185,20 @@ export default function MenuCycle() {
 
   const seedDefaults = () => {
     if (confirm('Gunakan menu standar dari gambar? Ini akan mengganti inputan saat ini (tapi belum disimpan ke database).')) {
-      setCycleData(DEFAULT_CYCLE_DATA);
+      const formatted: Record<number, Record<string, CycleCell>> = {};
+      Object.keys(DEFAULT_CYCLE_DATA).forEach((dayStr) => {
+        const day = parseInt(dayStr);
+        formatted[day] = {};
+        Object.keys(DEFAULT_CYCLE_DATA[day]).forEach((mealTime) => {
+          formatted[day][mealTime] = {
+            foodItems: DEFAULT_CYCLE_DATA[day][mealTime],
+            standarBahan: 'Beras, sayuran segar, lauk pauk',
+            gramasi: 'Nasi 150g, Protein 50g, Sayur 100g, Buah 50g',
+            beratStandar: '350'
+          };
+        });
+      });
+      setCycleData(formatted);
     }
   };
 
@@ -241,12 +278,49 @@ export default function MenuCycle() {
                   </td>
                   {DAYS.map(day => (
                     <td key={day} className="p-4 align-top">
-                      <textarea
-                        value={cycleData[day]?.[meal.id] || ''}
-                        onChange={(e) => handleCellChange(day, meal.id, e.target.value)}
-                        placeholder="Contoh: Nasi, Ayam, Kol..."
-                        className="w-full min-h-[100px] p-4 rounded-2xl bg-white border border-slate-100 focus:border-emerald-200 focus:ring-4 focus:ring-emerald-50 outline-none transition-all text-sm font-medium text-slate-700 placeholder:text-slate-300 resize-none"
-                      />
+                      <div className="space-y-3 min-w-[220px] p-2 bg-slate-50/50 rounded-2xl border border-slate-150/80">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black tracking-wider text-slate-400 uppercase">Menu Hidangan</label>
+                          <textarea
+                            value={cycleData[day]?.[meal.id]?.foodItems || ''}
+                            onChange={(e) => handleCellFieldChange(day, meal.id, 'foodItems', e.target.value)}
+                            placeholder="Nasi, Ayam, Kol..."
+                            className="w-full min-h-[50px] p-2 text-xs rounded-xl bg-white border border-slate-200 focus:border-emerald-250 focus:ring-2 focus:ring-emerald-50 outline-none transition-all font-bold text-slate-700 placeholder:text-slate-300 resize-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black tracking-wider text-slate-400 uppercase">Standar Bahan</label>
+                          <input
+                            type="text"
+                            value={cycleData[day]?.[meal.id]?.standarBahan || ''}
+                            onChange={(e) => handleCellFieldChange(day, meal.id, 'standarBahan', e.target.value)}
+                            placeholder="Standard Bahan..."
+                            className="w-full p-2 text-xs rounded-xl bg-white border border-slate-200 focus:border-emerald-250 focus:ring-2 focus:ring-emerald-50 outline-none transition-all font-bold text-slate-750 placeholder:text-slate-300"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black tracking-wider text-slate-400 uppercase">Gramasi</label>
+                            <input
+                              type="text"
+                              value={cycleData[day]?.[meal.id]?.gramasi || ''}
+                              onChange={(e) => handleCellFieldChange(day, meal.id, 'gramasi', e.target.value)}
+                              placeholder="e.g. 50g"
+                              className="w-full p-2 text-[11px] rounded-xl bg-white border border-slate-200 focus:border-emerald-250 focus:ring-2 focus:ring-emerald-50 outline-none transition-all font-bold text-slate-755 placeholder:text-slate-300"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black tracking-wider text-slate-400 uppercase">Berat Standar (gr)</label>
+                            <input
+                              type="text"
+                              value={cycleData[day]?.[meal.id]?.beratStandar || ''}
+                              onChange={(e) => handleCellFieldChange(day, meal.id, 'beratStandar', e.target.value)}
+                              placeholder="e.g. 300"
+                              className="w-full p-2 text-[11px] rounded-xl bg-white border border-slate-200 focus:border-emerald-250 focus:ring-2 focus:ring-emerald-50 outline-none transition-all font-bold text-slate-755 placeholder:text-slate-300"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </td>
                   ))}
                 </tr>

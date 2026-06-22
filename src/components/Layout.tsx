@@ -37,8 +37,8 @@ export default function Layout() {
     { name: 'Dashboard Utama', path: '/', icon: LayoutDashboard },
     { name: 'Input Sisa Makan', path: '/record', icon: PlusCircle },
     { name: 'Laporan', path: '/reports', icon: FileText },
+    { name: 'Siklus Menu', path: '/menu-cycle', icon: Utensils },
     ...(isAdmin ? [
-      { name: 'Siklus Menu', path: '/menu-cycle', icon: Utensils },
       { name: 'Data Master', path: '/master', icon: Database },
     ] : []),
   ];
