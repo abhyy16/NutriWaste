@@ -36,6 +36,13 @@ export default function MasterData() {
   // UI State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNotification, setShowNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    confirmText?: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
 
   const notify = (type: 'success' | 'error', message: string) => {
     setShowNotification({ type, message });
@@ -54,24 +61,32 @@ export default function MasterData() {
     }
   };
 
-  const seedDefaults = async () => {
-    if (!confirm('Gunakan bangsal standar sebagai awal?')) return;
-    setIsSubmitting(true);
-    try {
-      const defaultWards = ['Bangsal Mawar', 'Bangsal Melati', 'Bangsal Anggrek', 'ICU', 'IGD'];
-      
-      for (const w of defaultWards) {
-        await addDoc(collection(db, 'wards'), { name: w, createdAt: serverTimestamp() });
-      }
+  const seedDefaults = () => {
+    setConfirmDialog({
+      title: 'Gunakan Contoh Data?',
+      message: 'Apakah Anda yakin ingin menambahkan bangsal standar ke database sebagai data awal?',
+      confirmText: 'Ya, Gunakan',
+      isDanger: false,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setIsSubmitting(true);
+        try {
+          const defaultWards = ['Bangsal Mawar', 'Bangsal Melati', 'Bangsal Anggrek', 'ICU', 'IGD'];
+          
+          for (const w of defaultWards) {
+            await addDoc(collection(db, 'wards'), { name: w, createdAt: serverTimestamp() });
+          }
 
-      notify('success', 'Data standar berhasil ditambahkan');
-      fetchData();
-    } catch (error) {
-      notify('error', 'Gagal menambahkan data standar');
-      console.error(error);
-    } finally {
-      setIsSubmitting(false);
-    }
+          notify('success', 'Data standar berhasil ditambahkan');
+          fetchData();
+        } catch (error) {
+          notify('error', 'Gagal menambahkan data standar');
+          console.error(error);
+        } finally {
+          setIsSubmitting(false);
+        }
+      }
+    });
   };
 
   useEffect(() => {
@@ -122,16 +137,25 @@ export default function MasterData() {
     }
   };
 
-  const handleDelete = async (coll: string, id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus data ini?')) return;
-    try {
-      await deleteDoc(doc(db, coll, id));
-      notify('success', 'Data berhasil dihapus');
-      fetchData();
-    } catch (error) {
-      notify('error', 'Gagal menghapus data. Anda mungkin tidak memiliki izin.');
-      handleFirestoreError(error, OperationType.DELETE, `${coll}/${id}`);
-    }
+  const handleDelete = (coll: string, id: string) => {
+    const itemName = coll === 'menus' ? 'jenis diet' : 'bangsal/unit';
+    setConfirmDialog({
+      title: `Hapus ${coll === 'menus' ? 'Jenis Diet' : 'Bangsal'}?`,
+      message: `Apakah Anda yakin ingin menghapus data ${itemName} ini secara permanen dari database?`,
+      confirmText: 'Ya, Hapus',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        try {
+          await deleteDoc(doc(db, coll, id));
+          notify('success', 'Data berhasil dihapus');
+          fetchData();
+        } catch (error) {
+          notify('error', 'Gagal menghapus data. Anda mungkin tidak memiliki izin.');
+          handleFirestoreError(error, OperationType.DELETE, `${coll}/${id}`);
+        }
+      }
+    });
   };
 
   return (
@@ -345,6 +369,52 @@ export default function MasterData() {
           </div>
         </div>
       </div>
+
+      {/* Custom animated confirmation modal */}
+      <AnimatePresence>
+        {confirmDialog && (
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmDialog(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="relative w-full max-w-md bg-white p-6 rounded-[2rem] border border-slate-100 shadow-2xl flex flex-col items-center text-center gap-4 z-10"
+            >
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${confirmDialog.isDanger ? 'bg-rose-50 border border-rose-100 text-rose-500' : 'bg-emerald-50 border border-emerald-100 text-emerald-500'}`}>
+                <AlertCircle size={24} className={confirmDialog.isDanger ? 'animate-pulse' : ''} />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-lg text-slate-900">{confirmDialog.title}</h4>
+                <p className="text-sm text-slate-500 px-2 leading-relaxed">{confirmDialog.message}</p>
+              </div>
+              <div className="flex gap-3 w-full mt-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDialog(null)}
+                  className="flex-1 py-3 px-4 rounded-xl border border-slate-200 text-slate-500 font-bold hover:bg-slate-50 hover:text-slate-700 transition-colors text-sm"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDialog.onConfirm}
+                  className={`flex-1 py-3 px-4 rounded-xl text-white font-bold shadow-md transition-all text-sm ${confirmDialog.isDanger ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/10' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/10'}`}
+                >
+                  {confirmDialog.confirmText || 'Ya'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

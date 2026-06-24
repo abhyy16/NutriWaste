@@ -684,22 +684,99 @@ export default function Dashboard() {
 
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-400 uppercase">Skala Comstock (Sisa)</label>
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                       {COMSTOCK_VALUES.map(v => (
-                         <button
-                           key={v.scale}
-                           type="button"
-                           onClick={() => setEditingTx({...editingTx, comstockScale: v.scale})}
-                           className={`py-2 rounded-xl text-xs font-black transition-all border-2 ${
-                             editingTx.comstockScale === v.scale 
-                             ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg' 
-                             : 'bg-white border-slate-100 text-slate-400 hover:border-emerald-200'
-                           }`}
-                         >
-                           {v.percentage}%
-                         </button>
-                       ))}
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 bg-slate-50/50 p-2 rounded-2xl border border-slate-100">
+                       {COMSTOCK_VALUES.map(v => {
+                         const isCurrent = editingTx.comstockScale === v.scale;
+                         return (
+                           <button
+                             key={v.scale}
+                             type="button"
+                             onClick={() => setEditingTx({...editingTx, comstockScale: v.scale})}
+                             className={`py-3 px-1 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-1.5 border group relative ${
+                               isCurrent 
+                               ? 'bg-gradient-to-r from-emerald-600 to-teal-600 border-transparent text-white shadow-md shadow-emerald-600/15 scale-[1.02] z-10 font-bold' 
+                               : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-800 hover:bg-slate-50'
+                             }`}
+                           >
+                             {/* Custom Comstock Pie-Chart Circle Graphic (Visual indicator from image reference) */}
+                             <div 
+                               className={`w-6.5 h-6.5 rounded-full border-2 transition-all duration-200 relative shrink-0 ${
+                                 isCurrent 
+                                   ? 'border-white bg-white/20' 
+                                   : 'border-slate-400 bg-slate-50 group-hover:border-slate-500'
+                               }`}
+                               style={{
+                                 background: isCurrent
+                                   ? `conic-gradient(#ffffff ${v.percentage}%, rgba(255,255,255,0.2) ${v.percentage}%)`
+                                   : `conic-gradient(#059669 ${v.percentage}%, #f1f5f9 ${v.percentage}%)`
+                               }}
+                             />
+                             <div className="flex flex-col items-center text-center">
+                               <span className="text-[10.5px] leading-none font-black">{v.percentage}%</span>
+                               <span className="text-[7.5px] opacity-80 leading-none mt-0.5 font-bold">
+                                 {v.scale === 0 ? 'Habis' : v.scale === 1 ? 'Sisa 1/4' : v.scale === 2 ? 'Sisa 1/2' : v.scale === 3 ? 'Sisa 3/4' : v.scale === 4 ? '95%' : 'Utuh'}
+                               </span>
+                             </div>
+                           </button>
+                         );
+                       })}
                     </div>
+
+                    {editingTx.comstockScale !== null && editingTx.comstockScale !== undefined && (
+                      <div className="mt-3 p-4 bg-gradient-to-r from-emerald-50/60 to-teal-50/60 rounded-2xl border border-emerald-100 shadow-sm flex items-center gap-3">
+                        {/* Large real-time Comstock pie-chart visualizer */}
+                        <div className="relative shrink-0">
+                          <div 
+                            className="w-10 h-10 rounded-full border-2 border-emerald-600 bg-slate-50 shadow-sm transition-all duration-300"
+                            style={{
+                              background: `conic-gradient(#059669 ${(COMSTOCK_VALUES.find(v => v.scale === editingTx.comstockScale)?.percentage || 0)}%, #f1f5f9 ${(COMSTOCK_VALUES.find(v => v.scale === editingTx.comstockScale)?.percentage || 0)}%)`
+                            }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-[8px] font-mono font-black text-emerald-800 bg-white/90 px-0.5 py-0.2 rounded shadow-sm scale-90 border border-emerald-100">
+                              ({editingTx.comstockScale})
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Title, percentage and slider */}
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                            <span className="flex items-center gap-1">
+                              <span className="p-0.5 bg-emerald-100 rounded-full text-emerald-600 flex items-center justify-center">
+                                <Utensils size={10} />
+                              </span>
+                              Sisa Makanan ({editingTx.foodType || 'Makanan Pokok'}):
+                            </span>
+                            <span className="font-mono text-xs font-black text-emerald-700">
+                              {(() => {
+                                const matched = COMSTOCK_VALUES.find(v => v.scale === editingTx.comstockScale);
+                                return matched ? matched.percentage : 0;
+                              })()}% Sisa
+                            </span>
+                          </div>
+                          <div className="h-3.5 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200">
+                            <motion.div 
+                              className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-red-500"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${(COMSTOCK_VALUES.find(v => v.scale === editingTx.comstockScale)?.percentage || 0)}%` }}
+                              transition={{ duration: 0.6, ease: 'easeOut' }}
+                            />
+                            <div 
+                              style={{ left: `${(COMSTOCK_VALUES.find(v => v.scale === editingTx.comstockScale)?.percentage || 0)}%` }}
+                              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-emerald-600 rounded-full shadow flex items-center justify-center transition-all duration-300 pointer-events-none"
+                            >
+                              <div className="w-1.2 h-1.2 bg-emerald-600 rounded-full" />
+                            </div>
+                          </div>
+                          <div className="flex justify-between text-[8px] text-slate-450 font-extrabold uppercase tracking-wider px-1">
+                            <span>Habis (0%)</span>
+                            <span>Setengah (50%)</span>
+                            <span>Utuh (100%)</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">

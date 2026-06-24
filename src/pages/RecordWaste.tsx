@@ -723,7 +723,7 @@ export default function RecordWaste() {
                       </div>
 
                       {/* Comstock horizontal selector buttons */}
-                      <div className="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-2xl">
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 bg-slate-50/70 p-2.5 rounded-2xl border border-slate-150">
                         {COMSTOCK_VALUES.map((v) => {
                           const isCurrent = data.comstockScale === v.scale;
                           return (
@@ -732,58 +732,94 @@ export default function RecordWaste() {
                               type="button"
                               disabled={isComposite}
                               onClick={() => handleScaleClick(fType, v.scale)}
-                              className={`flex-1 min-w-[75px] py-4 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-0.5 ${
+                              className={`py-3.5 px-1 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-2 border group relative ${
                                 isCurrent
-                                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/15 scale-[1.03] z-10 font-bold'
+                                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 border-transparent text-white shadow-md shadow-emerald-600/15 scale-[1.03] z-10 font-bold'
                                   : isComposite
-                                    ? 'bg-slate-100/50 border border-slate-150 text-slate-350 cursor-not-allowed opacity-50'
-                                    : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 font-bold'
+                                    ? 'bg-slate-100/50 border-slate-150 text-slate-300 cursor-not-allowed opacity-50'
+                                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800 hover:border-slate-300 font-bold'
                               }`}
                             >
-                              <span className="text-[11px] leading-tight font-black">{v.percentage}%</span>
-                              <span className="text-[9px] opacity-80 leading-none">
-                                {v.scale === 0 ? 'Habis' : v.scale === 1 ? 'Sisa 1/4' : v.scale === 2 ? 'Sisa 1/2' : v.scale === 3 ? 'Sisa 3/4' : v.scale === 4 ? '95%' : 'Utuh'}
-                              </span>
+                              {/* Custom Comstock Pie-Chart Circle Graphic (Visual indicator from image reference) */}
+                              <div 
+                                className={`w-7 h-7 rounded-full border-2 transition-all duration-200 relative shrink-0 ${
+                                  isCurrent 
+                                    ? 'border-white bg-white/20' 
+                                    : 'border-slate-400 bg-slate-100 group-hover:border-slate-500'
+                                }`}
+                                style={{
+                                  background: isCurrent
+                                    ? `conic-gradient(#ffffff ${v.percentage}%, rgba(255,255,255,0.25) ${v.percentage}%)`
+                                    : `conic-gradient(#059669 ${v.percentage}%, #f1f5f9 ${v.percentage}%)`
+                                }}
+                              />
+                              <div className="flex flex-col items-center text-center">
+                                <span className="text-[11px] leading-tight font-black">{v.percentage}%</span>
+                                <span className="text-[8px] opacity-80 leading-none font-bold mt-0.5">
+                                  {v.scale === 0 ? 'Habis' : v.scale === 1 ? 'Sisa 1/4' : v.scale === 2 ? 'Sisa 1/2' : v.scale === 3 ? 'Sisa 3/4' : v.scale === 4 ? '95%' : 'Utuh'}
+                                </span>
+                                <span className="text-[7.5px] opacity-60 font-mono mt-0.5 font-bold">({v.scale})</span>
+                              </div>
                             </button>
                           );
                         })}
                       </div>
 
-                      {/* Visualisasi untuk Semua (Komposit) */}
-                      {isComposite && hasSelectedScale && (
-                        <div className="space-y-2 mt-4 p-4 bg-emerald-50 bg-opacity-40 rounded-2xl border border-emerald-100">
-                          <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                            <span className="flex items-center gap-1.5">
-                              <span className="p-1 bg-emerald-100 rounded-full text-emerald-600 flex items-center justify-center">
-                                <UtensilsCrossed size={12} />
-                              </span>
-                              Visualisasi Rerata Sisa Makanan Komposit:
-                            </span>
-                            <span className="font-mono text-sm font-black text-emerald-700">
-                              {(() => {
-                                const matched = COMSTOCK_VALUES.find(v => v.scale === data.comstockScale);
-                                return matched ? matched.percentage : 0;
-                              })()}% Sisa
-                            </span>
-                          </div>
-                          <div className="h-4 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200">
-                            <motion.div 
-                              className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-red-500"
-                              initial={{ width: 0 }}
-                              animate={{ width: `${(COMSTOCK_VALUES.find(v => v.scale === data.comstockScale)?.percentage || 0)}%` }}
-                              transition={{ duration: 0.6, ease: 'easeOut' }}
-                            />
+                      {/* Visualisasi untuk Semua (Komposit) & Kategori Lainnya */}
+                      {hasSelectedScale && (
+                        <div className="mt-4 p-5 bg-gradient-to-r from-emerald-50/80 to-teal-50/80 rounded-[1.75rem] border border-emerald-100/80 shadow-sm flex flex-col sm:flex-row items-center gap-4">
+                          {/* Left side: Beautiful large real-time Comstock pie-chart visualizer */}
+                          <div className="relative shrink-0">
                             <div 
-                              style={{ left: `${(COMSTOCK_VALUES.find(v => v.scale === data.comstockScale)?.percentage || 0)}%` }}
-                              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-4.5 h-4.5 bg-white border-2 border-emerald-605 rounded-full shadow flex items-center justify-center transition-all duration-300 pointer-events-none"
-                            >
-                              <div className="w-1.5 h-1.5 bg-emerald-650 rounded-full animate-ping" />
+                              className="w-12 h-12 rounded-full border-2 border-emerald-600 bg-slate-50 shadow-sm transition-all duration-300"
+                              style={{
+                                background: `conic-gradient(#059669 ${(COMSTOCK_VALUES.find(v => v.scale === data.comstockScale)?.percentage || 0)}%, #f1f5f9 ${(COMSTOCK_VALUES.find(v => v.scale === data.comstockScale)?.percentage || 0)}%)`
+                              }}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-[9px] font-mono font-black text-emerald-800 bg-white/90 px-1 py-0.5 rounded shadow-sm scale-90 border border-emerald-100">
+                                {data.comstockScale !== undefined && data.comstockScale !== null ? `(${data.comstockScale})` : '-'}
+                              </span>
                             </div>
                           </div>
-                          <div className="flex justify-between text-[9px] text-slate-430 font-extrabold uppercase tracking-wider px-1">
-                            <span>Habis (0%)</span>
-                            <span>Setengah (50%)</span>
-                            <span>Utuh (100%)</span>
+
+                          {/* Right side: Title, percentage text, and slider */}
+                          <div className="flex-1 w-full space-y-2">
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                              <span className="flex items-center gap-1.5">
+                                <span className="p-1 bg-emerald-100 rounded-full text-emerald-600 flex items-center justify-center">
+                                  <UtensilsCrossed size={12} />
+                                </span>
+                                {isComposite 
+                                  ? 'Rerata Sisa Makanan Komposit:' 
+                                  : `Sisa Makanan ${fType}:`}
+                              </span>
+                              <span className="font-mono text-sm font-black text-emerald-700">
+                                {(() => {
+                                  const matched = COMSTOCK_VALUES.find(v => v.scale === data.comstockScale);
+                                  return matched ? matched.percentage : 0;
+                                })()}% Sisa
+                              </span>
+                            </div>
+                            <div className="h-4 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200">
+                              <motion.div 
+                                className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-red-500"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${(COMSTOCK_VALUES.find(v => v.scale === data.comstockScale)?.percentage || 0)}%` }}
+                                transition={{ duration: 0.6, ease: 'easeOut' }}
+                              />
+                              <div 
+                                style={{ left: `${(COMSTOCK_VALUES.find(v => v.scale === data.comstockScale)?.percentage || 0)}%` }}
+                                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-4.5 h-4.5 bg-white border-2 border-emerald-605 rounded-full shadow flex items-center justify-center transition-all duration-300 pointer-events-none"
+                              >
+                                <div className="w-1.5 h-1.5 bg-emerald-650 rounded-full animate-ping" />
+                              </div>
+                            </div>
+                            <div className="flex justify-between text-[9px] text-slate-430 font-extrabold uppercase tracking-wider px-1">
+                              <span>Habis (0%)</span>
+                              <span>Setengah (50%)</span>
+                              <span>Utuh (100%)</span>
+                            </div>
                           </div>
                         </div>
                       )}

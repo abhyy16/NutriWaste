@@ -3,7 +3,7 @@ import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Transaction, Menu, Ward } from '../types';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search } from 'lucide-react';
+import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search, X, Info, FileText, Activity, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -109,6 +109,81 @@ export default function Reports() {
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState<string>('all');
   const [selectedCycleDay, setSelectedCycleDay] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [showFilters, setShowFilters] = useState<boolean>(false);
+
+  const exportPatientToExcel = (patientName: string) => {
+    const pTxs = transactions.filter(t => t.patientName.toLowerCase() === patientName.toLowerCase());
+    const data = pTxs.map(t => {
+      const menu = menus.find(m => m.id === t.menuId);
+      const ward = wards.find(w => w.id === t.wardId);
+      const stdW = (t.wasteWeight + t.consumptionWeight) || 400;
+      const wastePercent = ((t.wasteWeight / stdW) * 100).toFixed(1);
+
+      return {
+        'Tanggal': format(t.timestamp || new Date(), 'dd/MM/yyyy'),
+        'Waktu': format(t.timestamp || new Date(), 'HH:mm'),
+        'Nama Pasien': t.patientName,
+        'JK': t.patientGender || '-',
+        'Umur': t.patientAge,
+        'Unit/Bangsal': ward?.name || 'Unknown',
+        'Kamar/Bed': `${t.roomNumber || '-'}/${t.bedNumber || '-'}`,
+        'PJ Ruangan': t.staffInCharge || '-',
+        'Jenis Diet': t.dietType || 'Biasa',
+        'Menu': menu?.foodItems || 'Menu Siklus',
+        'Waktu Makan': (t.mealTime || '').replace('_', ' ').toUpperCase(),
+        'Jenis Makanan': t.foodType || 'Makanan Pokok',
+        'Berat Sisa (g)': t.wasteWeight,
+        'Berat Standar (g)': stdW,
+        'Persentase Waste (%)': wastePercent,
+        'Alasan': t.reason || '-',
+        'Petugas Entry': t.staffName || '-'
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Riwayat Sisa Makan');
+    XLSX.writeFile(wb, `Sisa_Makan_${patientName.replace(/\s+/g, '_')}_${selectedMonth}.xlsx`);
+  };
+
+  const exportPatientToPDF = (patientName: string) => {
+    const pTxs = transactions.filter(t => t.patientName.toLowerCase() === patientName.toLowerCase());
+    const doc = new jsPDF('landscape');
+    doc.setFontSize(18);
+    doc.text(`Riwayat Sisa Makan: ${patientName}`, 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Dicetak pada: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 30);
+
+    const tableData = pTxs.map(t => {
+      const ward = wards.find(w => w.id === t.wardId);
+      const stdW = (t.wasteWeight + t.consumptionWeight) || 400;
+      const wastePercent = ((t.wasteWeight / stdW) * 100).toFixed(0);
+
+      return [
+        format(t.timestamp || new Date(), 'dd/MM/yy HH:mm'),
+        ward?.name || '-',
+        `${t.roomNumber || '-'}/${t.bedNumber || '-'}`,
+        (t.mealTime || '').replace('_', ' ').toUpperCase(),
+        t.foodType || 'Makanan Pokok',
+        `${t.wasteWeight}g / ${stdW}g`,
+        `${wastePercent}%`,
+        t.reason || '-'
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 35,
+      head: [['Tanggal & Waktu', 'Unit', 'Kmr/Bed', 'Waktu Makan', 'Jenis', 'Gramasi Sisa', 'Waste %', 'Alasan']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [5, 150, 105] }, // emerald-600
+      styles: { fontSize: 9 }
+    });
+
+    doc.save(`Riwayat_Sisa_Makan_${patientName.replace(/\s+/g, '_')}_${selectedMonth}.pdf`);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -399,138 +474,166 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Filter Section */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
-        <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-          <TableIcon size={16} className="text-emerald-600" />
-          Filter Laporan
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cari Pasien</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari nama pasien..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-750 text-xs sm:text-sm"
-              />
-              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                <Search size={16} />
-              </div>
-            </div>
+      {/* Search & Filter Section */}
+      <div className="bg-white p-6 rounded-[2rem] border border-slate-200/90 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Search size={18} className="text-emerald-600" />
+            <h3 className="font-display font-black text-slate-800 text-sm tracking-tight">Pencarian & Filter Laporan</h3>
           </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Berdasarkan Bangsal</label>
-            <select
-              value={selectedWard}
-              onChange={(e) => setSelectedWard(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
-            >
-              <option value="all">Semua Bangsal</option>
-              {wards.map(w => (
-                <option key={w.id} value={w.id}>{w.name}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Waktu Makan</label>
-            <select
-              value={selectedMealTime}
-              onChange={(e) => setSelectedMealTime(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
-            >
-              <option value="all">Semua Waktu Makan</option>
-              <option value="sarapan">Sarapan</option>
-              <option value="selingan_1">Selingan 1</option>
-              <option value="makan_siang">Siang</option>
-              <option value="selingan_2">Selingan 2</option>
-              <option value="makan_malam">Malam</option>
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Jenis Makanan</label>
-            <select
-              value={selectedFoodType}
-              onChange={(e) => setSelectedFoodType(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
-            >
-              <option value="all">Semua Jenis</option>
-              {foodTypes.map(ft => (
-                <option key={ft} value={ft}>{ft}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hari</label>
-            <select
-              value={selectedDayOfWeek}
-              onChange={(e) => setSelectedDayOfWeek(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
-            >
-              <option value="all">Semua Hari</option>
-              <option value="Senin">Senin</option>
-              <option value="Selasa">Selasa</option>
-              <option value="Rabu">Rabu</option>
-              <option value="Kamis">Kamis</option>
-              <option value="Jumat">Jumat</option>
-              <option value="Sabtu">Sabtu</option>
-              <option value="Minggu">Minggu</option>
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hari Siklus</label>
-            <select
-              value={selectedCycleDay}
-              onChange={(e) => setSelectedCycleDay(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
-            >
-              <option value="all">Semua Siklus</option>
-              {Array.from({ length: 10 }, (_, i) => i + 1).map(day => (
-                <option key={day} value={String(day)}>Hari Siklus {day}</option>
-              ))}
-            </select>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center justify-center gap-1.5 px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-xs font-bold text-slate-600 transition cursor-pointer focus:outline-none"
+          >
+            <span>{showFilters ? 'Sembunyikan Saringan' : 'Tampilkan Saringan'}</span>
+            <ChevronDown size={14} className={`transform transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+          </button>
         </div>
+
+        {/* ALWAYS VISIBLE SEARCH BAR AT THE TOP FOR PATIENTS */}
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Masukkan nama pasien untuk mencari riwayat sisa makan secara instan..."
+            className="w-full pl-11 pr-10 py-3 rounded-2xl border border-slate-200 bg-slate-50/50 outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-600 transition-all font-bold text-slate-855 text-xs sm:text-sm"
+          />
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+            <Search size={18} />
+          </div>
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline` focus:none cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* Collapsible filters that expand/collapse to save space */}
+        {showFilters && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            transition={{ duration: 0.25 }}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-4 border-t border-slate-100"
+          >
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Berdasarkan Bangsal</label>
+              <select
+                value={selectedWard}
+                onChange={(e) => setSelectedWard(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
+              >
+                <option value="all">Semua Bangsal</option>
+                {wards.map(w => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Waktu Makan</label>
+              <select
+                value={selectedMealTime}
+                onChange={(e) => setSelectedMealTime(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
+              >
+                <option value="all">Semua Waktu Makan</option>
+                <option value="sarapan">Sarapan</option>
+                <option value="selingan_1">Selingan 1</option>
+                <option value="makan_siang">Siang</option>
+                <option value="selingan_2">Selingan 2</option>
+                <option value="makan_malam">Malam</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Jenis Makanan</label>
+              <select
+                value={selectedFoodType}
+                onChange={(e) => setSelectedFoodType(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
+              >
+                <option value="all">Semua Jenis</option>
+                {foodTypes.map(ft => (
+                  <option key={ft} value={ft}>{ft}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hari</label>
+              <select
+                value={selectedDayOfWeek}
+                onChange={(e) => setSelectedDayOfWeek(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
+              >
+                <option value="all">Semua Hari</option>
+                <option value="Senin">Senin</option>
+                <option value="Selasa">Selasa</option>
+                <option value="Rabu">Rabu</option>
+                <option value="Kamis">Kamis</option>
+                <option value="Jumat">Jumat</option>
+                <option value="Sabtu">Sabtu</option>
+                <option value="Minggu">Minggu</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hari Siklus</label>
+              <select
+                value={selectedCycleDay}
+                onChange={(e) => setSelectedCycleDay(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-110/20 focus:border-emerald-600 transition-all font-bold text-slate-700 text-xs sm:text-sm cursor-pointer"
+              >
+                <option value="all">Semua Siklus</option>
+                {Array.from({ length: 10 }, (_, i) => i + 1).map(day => (
+                  <option key={day} value={String(day)}>Hari Siklus {day}</option>
+                ))}
+              </select>
+            </div>
+          </motion.div>
+        )}
       </div>
 
-      {/* Four Visual Bar Charts showing food waste percentage configurations */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <MiniBarChartCard 
-          title="Waste per Jenis Makanan" 
-          data={wasteByFoodType} 
-          maxItem={maxFoodType} 
-          minItem={minFoodType} 
-          icon={Utensils} 
-        />
-        <MiniBarChartCard 
-          title="Waste per Waktu Makan" 
-          data={wasteByMealTime} 
-          maxItem={maxMealTime} 
-          minItem={minMealTime} 
-          icon={Clock} 
-        />
-        <MiniBarChartCard 
-          title="Waste per Hari" 
-          data={wasteByDay} 
-          maxItem={maxDay} 
-          minItem={minDay} 
-          icon={Calendar} 
-        />
-        <MiniBarChartCard 
-          title="Waste per Hari Siklus" 
-          data={wasteByCycle} 
-          maxItem={maxCycle} 
-          minItem={minCycle} 
-          icon={Layers} 
-        />
-      </div>
+      {/* Four Visual Bar Charts showing food waste percentage configurations - hidden during search */}
+      {!searchQuery && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <MiniBarChartCard 
+            title="Waste per Jenis Makanan" 
+            data={wasteByFoodType} 
+            maxItem={maxFoodType} 
+            minItem={minFoodType} 
+            icon={Utensils} 
+          />
+          <MiniBarChartCard 
+            title="Waste per Waktu Makan" 
+            data={wasteByMealTime} 
+            maxItem={maxMealTime} 
+            minItem={minMealTime} 
+            icon={Clock} 
+          />
+          <MiniBarChartCard 
+            title="Waste per Hari" 
+            data={wasteByDay} 
+            maxItem={maxDay} 
+            minItem={minDay} 
+            icon={Calendar} 
+          />
+          <MiniBarChartCard 
+            title="Waste per Hari Siklus" 
+            data={wasteByCycle} 
+            maxItem={maxCycle} 
+            minItem={minCycle} 
+            icon={Layers} 
+          />
+        </div>
+      )}
 
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
@@ -575,8 +678,18 @@ export default function Reports() {
                     return (
                       <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4">
-                          <p className="font-bold text-slate-800">{t.patientName} ({t.patientGender || '-'})</p>
-                          <p className="text-[10px] text-slate-400 font-medium">BED: {t.bedNumber || '-'}</p>
+                          <button 
+                            type="button"
+                            onClick={() => setSelectedTx(t)}
+                            className="text-left cursor-pointer group focus:outline-none"
+                            title="Klik untuk melihat detail lengkap pasien"
+                          >
+                            <p className="font-extrabold text-emerald-600 group-hover:text-emerald-700 hover:underline transition-all underline-offset-2 flex items-center gap-1.5 leading-tight">
+                              {t.patientName} ({t.patientGender || '-'})
+                              <span className="opacity-0 group-hover:opacity-100 transition-all font-black bg-emerald-50 text-emerald-700 text-[8px] px-1.5 py-0.5 rounded uppercase tracking-wider">Detail</span>
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-bold group-hover:text-slate-500 transition-colors mt-0.5">BED: {t.bedNumber || '-'}</p>
+                          </button>
                         </td>
                         <td className="px-6 py-4 text-slate-600 font-medium">{ward?.name}</td>
                         <td className="px-6 py-4">
@@ -592,9 +705,15 @@ export default function Reports() {
                            <span className="px-2 py-1 bg-amber-50 text-amber-700 text-[10px] font-black rounded uppercase whitespace-nowrap">{t.foodType || 'Makanan Pokok'}</span>
                         </td>
                         <td className="px-6 py-4 text-right">
-                           <span className={`font-black ${((t.wasteWeight / 400) * 100) > 20 ? 'text-red-500' : 'text-emerald-600'}`}>
-                             {((t.wasteWeight / 400) * 100).toFixed(0)}%
-                           </span>
+                          {(() => {
+                            const stdW = (t.wasteWeight + t.consumptionWeight) || 400;
+                            const pct = Math.round((t.wasteWeight / stdW) * 100);
+                            return (
+                              <span className={`font-black ${pct > 20 ? 'text-rose-500' : 'text-emerald-600'}`}>
+                                {pct}%
+                              </span>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );
@@ -603,7 +722,295 @@ export default function Reports() {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>      {/* Modern, gorgeous patient details description modal dialog overlay */}
+      {selectedTx && (() => {
+        const pTxs = transactions.filter(t => t.patientName.toLowerCase() === selectedTx.patientName.toLowerCase());
+        const patientWasteByFoodType = foodTypes.map(fType => {
+          const matchingTxs = pTxs.filter(t => (t.foodType || 'Makanan Pokok') === fType);
+          const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
+          const count = matchingTxs.length;
+          let totalStdWeight = 0;
+          matchingTxs.forEach(t => {
+            totalStdWeight += (t.wasteWeight + t.consumptionWeight) || 400;
+          });
+          const percentage = totalStdWeight > 0 ? (totalWaste / totalStdWeight) * 100 : 0;
+          return { label: fType, percentage, count };
+        });
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="bg-white rounded-[2.5rem] border border-slate-200 w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col my-8"
+            >
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-8 py-6 relative flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-white/10 rounded-2xl border border-white/20">
+                    <User size={22} className="text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-display font-black text-lg tracking-tight">Profil & Riwayat Pasien</h4>
+                    <p className="text-xs text-emerald-100 font-bold uppercase tracking-widest mt-0.5">Asesmen & Analisis Sisa Makan Comstock</p>
+                  </div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setSelectedTx(null)}
+                  className="p-2 hover:bg-white/10 rounded-xl transition duration-150 cursor-pointer focus:outline-none"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-8 space-y-6 overflow-y-auto max-h-[72vh]">
+                {/* Patient Identity Grid */}
+                <div className="space-y-2">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <Activity size={10} className="text-emerald-500" />
+                    Identitas Pasien
+                  </h5>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/50 p-5 rounded-3xl border border-slate-100">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block">NAMA LENGKAP PASIEN</span>
+                      <span className="text-sm font-black text-slate-800">{selectedTx.patientName}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block">JENIS KELAMIN</span>
+                      <span className="text-sm font-black text-slate-800">{selectedTx.patientGender === 'L' ? 'Laki-Laki ♂' : 'Perempuan ♀'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block">UMUR PASIEN</span>
+                      <span className="text-sm font-black text-slate-800">{selectedTx.patientAge} Tahun</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block">LOKASI BANGSAL / BED</span>
+                      <span className="text-sm font-black text-slate-800">
+                        {wards.find(w => w.id === selectedTx.wardId)?.name || 'Bangsal'} 
+                        {selectedTx.roomNumber ? ` • Kamar ${selectedTx.roomNumber}` : ''}
+                        {selectedTx.bedNumber ? ` • Bed ${selectedTx.bedNumber}` : ''}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Patient Waste Analytics and Trend (The requested Chart) */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-2">
+                    <BarChart2 size={10} className="text-emerald-500" />
+                    Grafik Rata-Rata Sisa Makanan Pasien ({pTxs.length} Asesmen Terkumpul)
+                  </h5>
+                  <div className="bg-slate-50/50 p-5 rounded-3xl border border-slate-100 space-y-3.5">
+                    {patientWasteByFoodType.map((item) => {
+                      const isMeasured = item.count > 0;
+                      return (
+                        <div key={item.label} className="space-y-1">
+                          <div className="flex justify-between items-center text-[10.5px] font-bold">
+                            <span className="text-slate-600 flex items-center gap-1.5 font-display">
+                              {item.label}
+                              <span className="text-[8px] text-slate-400 font-normal">({item.count}x)</span>
+                            </span>
+                            <span className={`font-mono text-[10px] font-black ${isMeasured ? (item.percentage > 20 ? 'text-rose-600' : 'text-emerald-600') : 'text-slate-400'}`}>
+                              {isMeasured ? `${item.percentage.toFixed(0)}% Sisa` : 'Tidak ada data'}
+                            </span>
+                          </div>
+                          <div className="h-2.5 bg-slate-100 rounded-full relative overflow-hidden">
+                            {isMeasured ? (
+                              <div 
+                                className={`h-full rounded-full transition-all duration-300 bg-gradient-to-r ${
+                                  item.percentage > 20 ? 'from-rose-500 to-amber-500' : 'from-emerald-500 to-teal-500'
+                                }`}
+                                style={{ width: `${Math.min(item.percentage, 100)}%` }}
+                              />
+                            ) : (
+                              <div className="h-full rounded-full bg-slate-200/50 w-0" />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Exporter Section inside Patient Profile (PDF and Excel specific downloaders) */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-2">
+                    <FileDown size={10} className="text-emerald-500" />
+                    Ekspor Laporan Sisa Makan Khusus Pasien Ini
+                  </h5>
+                  <div className="grid grid-cols-2 gap-3 bg-slate-50/50 p-4 rounded-[1.5rem] border border-slate-150">
+                    <button 
+                      type="button"
+                      onClick={() => exportPatientToExcel(selectedTx.patientName)}
+                      className="flex items-center justify-center gap-1.5 py-3.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold rounded-2xl text-xs shadow-sm transition cursor-pointer"
+                    >
+                      <FileDown size={14} className="text-emerald-600" />
+                      <span>Unduh Excel</span>
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => exportPatientToPDF(selectedTx.patientName)}
+                      className="flex items-center justify-center gap-1.5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs shadow hover:shadow-emerald-100 transition cursor-pointer"
+                    >
+                      <FileDown size={14} />
+                      <span>Unduh PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Meal & Diet Details */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <FileText size={10} className="text-emerald-500" />
+                    Detail Asesmen Terkini (ID: {selectedTx.id?.slice(0,6)})
+                  </h5>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/50 p-5 rounded-3xl border border-slate-100">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block">JENIS DIET</span>
+                      <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-extrabold rounded uppercase inline-block mt-1">
+                        {selectedTx.dietType || 'Biasa'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block">WAKTU MAKAN</span>
+                      <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-extrabold rounded uppercase inline-block mt-1">
+                        {(selectedTx.mealTime || '').replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block">TANGGAL PENILAIAN</span>
+                      <span className="text-xs font-bold text-slate-700 mt-1 block">
+                        {selectedTx.timestamp ? format(selectedTx.timestamp, 'dd MMMM yyyy, HH:mm') : '-'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block">JENIS MAKANAN</span>
+                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-extrabold rounded uppercase inline-block mt-1">
+                        {selectedTx.foodType || 'Makanan Pokok'}
+                      </span>
+                    </div>
+                    {/* Detailed plate menu */}
+                    <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-400 block">MENU DI MAKANAN</span>
+                      <span className="text-xs font-black text-slate-700 block mt-1">
+                        {menus.find(m => m.id === selectedTx.menuId)?.foodItems || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Comstock Assessment */}
+                <div className="space-y-2">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    <Info size={10} className="text-emerald-500" />
+                    Asesmen Porsi Sisa & Gramasi
+                  </h5>
+                  <div className="bg-slate-50/50 p-5 rounded-3xl border border-slate-100 space-y-4">
+                    {/* visual slider scale */}
+                    {(() => {
+                      const stdW = (selectedTx.wasteWeight + selectedTx.consumptionWeight) || 400;
+                      const pct = Math.round((selectedTx.wasteWeight / stdW) * 100);
+                      return (
+                        <>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="bg-white p-3 rounded-2xl border border-slate-100 text-center">
+                              <span className="text-[9px] font-bold text-slate-400 block">STANDAR PORSI</span>
+                              <span className="font-mono text-xs font-black text-slate-800">{stdW} gr</span>
+                            </div>
+                            <div className="bg-white p-3 rounded-2xl border border-slate-100 text-center">
+                              <span className="text-[9px] font-bold text-slate-400 block">DIKONSUMSI</span>
+                              <span className="font-mono text-xs font-black text-emerald-600">{selectedTx.consumptionWeight} gr</span>
+                            </div>
+                            <div className="bg-white p-3 rounded-2xl border border-slate-100 text-center">
+                              <span className="text-[9px] font-bold text-rose-500 block">SISA MAKANAN</span>
+                              <span className="font-mono text-xs font-black text-rose-600">{selectedTx.wasteWeight} gr</span>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 flex flex-col sm:flex-row items-center gap-4">
+                            {/* Beautiful large Comstock pie-chart visualizer */}
+                            <div className="relative shrink-0">
+                              <div 
+                                className="w-12 h-12 rounded-full border-2 border-emerald-600 bg-slate-50 shadow-sm transition-all duration-300"
+                                style={{
+                                  background: `conic-gradient(#059669 ${pct}%, #f1f5f9 ${pct}%)`
+                                }}
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-[9px] font-mono font-black text-emerald-800 bg-white/90 px-1 py-0.5 rounded shadow-sm scale-90 border border-emerald-100">
+                                  {selectedTx.comstockScale !== undefined && selectedTx.comstockScale !== null ? `(${selectedTx.comstockScale})` : '-'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex-1 w-full space-y-2">
+                              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                                <span>Sisa Makanan (Skala Comstock):</span>
+                                <span className={`font-mono text-sm font-black ${pct > 20 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                  {pct}% Sisa (Skala {selectedTx.comstockScale})
+                                </span>
+                              </div>
+                              <div className="h-3 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200">
+                                <div 
+                                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500"
+                                  style={{ width: `${pct}%` }}
+                                />
+                                <div 
+                                  style={{ left: `${pct}%` }}
+                                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-slate-400 rounded-full shadow"
+                                />
+                              </div>
+                              <div className="flex justify-between text-[8px] text-slate-400 font-black uppercase tracking-wider px-1 font-bold">
+                                <span>Habis (0%)</span>
+                                <span>Setengah (50%)</span>
+                                <span>Utuh (100%)</span>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+
+                    {/* Reason for waste if exists */}
+                    {selectedTx.reason && (
+                      <div className="pt-2 border-t border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">ALASAN SISA MAKANAN</span>
+                        <p className="text-xs font-bold text-slate-700 italic bg-amber-500/5 p-3 rounded-xl border border-amber-500/10 mt-1">
+                          "{selectedTx.reason}"
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Staff ID details */}
+                    <div className="pt-2 border-t border-slate-100 flex justify-between text-[11px] font-bold text-slate-500">
+                      <span>Petugas Penilai:</span>
+                      <span className="text-slate-800 flex items-center gap-1">
+                        <ShieldCheck size={14} className="text-emerald-500" />
+                        {selectedTx.staffName || 'Petugas Gizi'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="bg-slate-50 px-8 py-5 border-t border-slate-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTx(null)}
+                  className="px-6 py-2 bg-slate-200 hover:bg-slate-300 transition duration-150 rounded-xl font-bold text-slate-700 text-xs cursor-pointer focus:outline-none"
+                >
+                  Tutup Deskripsi
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
