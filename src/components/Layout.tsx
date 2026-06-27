@@ -5,6 +5,8 @@ import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X, Fil
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
+// @ts-ignore
+import nutriwasteLogo from '../assets/images/nutriwaste_logo_1782572222694.jpg';
 
 export default function Layout() {
   const { user, profile } = useAuth();
@@ -48,7 +50,7 @@ export default function Layout() {
       {!isMobile && (
         <div className="p-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-emerald-250/30">N</div>
+            <img src={nutriwasteLogo} alt="Nutriwaste Logo" className="w-10 h-10 rounded-2xl object-cover shadow-md border border-slate-100 shrink-0" referrerPolicy="no-referrer" />
             <div>
               <h1 className="text-xl font-display font-black text-slate-800 tracking-tight leading-none">Nutriwaste</h1>
               <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest block mt-0.5">Digital Nutrition</span>
@@ -74,34 +76,32 @@ export default function Layout() {
                 ${isMobile ? 'text-base py-4' : 'text-sm'}
               `}
             >
-              <Icon 
-                size={isMobile ? 22 : 18} 
-                strokeWidth={isActive ? 2.5 : 2} 
-                className={`transition-transform duration-200 group-hover:scale-105 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`} 
-              />
-              <span className="font-display tracking-wide">{item.name}</span>
+              <Icon size={18} className={isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600 transition-colors'} />
+              <span className="font-display font-black tracking-tight">{item.name}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+      <div className="p-4 border-t border-slate-100 space-y-3">
+        {profile && (
+          <div className="flex items-center gap-3 px-2 py-1.5 bg-slate-50/50 rounded-2xl border border-slate-100/50">
+            <div className="w-9 h-9 bg-emerald-100 text-emerald-700 font-extrabold flex items-center justify-center rounded-xl text-xs uppercase tracking-wider">
+              {profile.name?.slice(0, 2) || 'US'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black text-slate-800 truncate leading-none">{profile.name}</p>
+              <span className="text-[10px] font-bold text-slate-400 block mt-0.5 capitalize">{profile.role === 'admin' ? 'Kordinator Gizi' : 'Petugas Gizi'}</span>
+            </div>
+          </div>
+        )}
         <Link 
           to="/profile"
           onClick={() => isMobile && setIsMenuOpen(false)}
-          className="flex items-center gap-3 px-3 py-2.5 mb-3 bg-white rounded-2xl border border-slate-250 shadow-sm hover:border-emerald-300 hover:ring-2 hover:ring-emerald-50/70 transition-all group lg:min-h-[60px]"
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50 rounded-xl transition-all border border-slate-150"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-extrabold shadow-md shadow-emerald-500/10 overflow-hidden flex-shrink-0">
-            {profile?.photoURL ? (
-              <img src={profile.photoURL} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              profile?.name.substring(0, 2).toUpperCase() || 'UN'
-            )}
-          </div>
-          <div className="flex-1 overflow-hidden text-left">
-            <p className="text-sm font-display font-black text-slate-800 truncate leading-tight">{profile?.name}</p>
-            <p className="text-[9px] text-emerald-600 font-extrabold uppercase tracking-widest mt-0.5">{profile?.role || 'Staff'}</p>
-          </div>
+          <User size={15} />
+          <span className="font-display">My Profile</span>
         </Link>
         <button
           onClick={handleLogout}
@@ -115,11 +115,15 @@ export default function Layout() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gradient-to-tr from-slate-50 via-emerald-50/15 to-teal-50/15 flex flex-col md:flex-row relative overflow-x-hidden">
+      {/* Subtle ambient decorative blur circles */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-100/10 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse-subtle" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-100/10 rounded-full blur-[100px] pointer-events-none -z-10" />
+
       {/* Mobile Header */}
       <header className="md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">N</div>
+          <img src={nutriwasteLogo} alt="Nutriwaste Logo" className="w-8 h-8 rounded-lg object-cover shadow-sm border border-slate-100 shrink-0" referrerPolicy="no-referrer" />
           <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Nutriwaste</h1>
         </div>
         <button 
@@ -155,7 +159,7 @@ export default function Layout() {
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-xl">N</div>
+                  <img src={nutriwasteLogo} alt="Nutriwaste Logo" className="w-10 h-10 rounded-xl object-cover shadow-sm border border-slate-100 shrink-0" referrerPolicy="no-referrer" />
                   <h1 className="text-xl font-bold text-slate-800">Nutriwaste</h1>
                 </div>
                 <button onClick={() => setIsMenuOpen(false)} className="p-2 text-slate-400">
@@ -169,7 +173,7 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-8 lg:p-12 pb-36 md:pb-8 lg:pb-12 max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-4 md:p-8 lg:p-12 pb-36 md:pb-8 lg:pb-12 max-w-7xl mx-auto w-full z-10">
         <Outlet />
       </main>
 

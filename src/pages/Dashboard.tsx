@@ -123,12 +123,11 @@ export default function Dashboard() {
   };
 
   // Logical Helpers
-  const displayedTransactions = transactions.filter(t => selectedWard === 'all' || t.wardId === selectedWard);
+  const displayedTransactions = transactions.filter(t => (selectedWard === 'all' || t.wardId === selectedWard) && t.foodType !== 'Semua (Komposit)');
 
   const avgWaste = displayedTransactions.length > 0 
     ? (displayedTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0) / displayedTransactions.reduce((acc, curr) => {
-        // Fallback weight if menu details are missing weight
-        return acc + 400; 
+        return acc + (curr.wasteWeight + curr.consumptionWeight); 
       }, 0)) * 100 
     : 0;
 
@@ -142,7 +141,7 @@ export default function Dashboard() {
     );
     
     const totalWaste = dayTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-    const totalServed = dayTransactions.length * 400;
+    const totalServed = dayTransactions.reduce((acc, curr) => acc + (curr.wasteWeight + curr.consumptionWeight), 0);
 
     return {
       name: format(date, 'EEE'),
@@ -155,7 +154,7 @@ export default function Dashboard() {
   const mealTimeData = mealTimes.map(m => {
     const mtTransactions = displayedTransactions.filter(t => t.mealTime === m);
     const totalWaste = mtTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-    const totalServed = mtTransactions.length * 400;
+    const totalServed = mtTransactions.reduce((acc, curr) => acc + (curr.wasteWeight + curr.consumptionWeight), 0);
 
     return {
       name: m.replace('_', ' ').toUpperCase(),
@@ -169,14 +168,13 @@ export default function Dashboard() {
     'Lauk Hewani',
     'Lauk Nabati',
     'Sayuran',
-    'Buah / Selingan',
-    'Semua (Komposit)'
+    'Buah / Selingan'
   ];
 
   const foodTypeData = foodTypesList.map(fType => {
     const fTransactions = displayedTransactions.filter(t => (t.foodType || 'Makanan Pokok') === fType);
     const totalWaste = fTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-    const totalServed = fTransactions.length * 400;
+    const totalServed = fTransactions.reduce((acc, curr) => acc + (curr.wasteWeight + curr.consumptionWeight), 0);
 
     return {
       name: fType,
@@ -674,8 +672,7 @@ export default function Dashboard() {
                         'Lauk Hewani',
                         'Lauk Nabati',
                         'Sayuran',
-                        'Buah / Selingan',
-                        'Semua (Komposit)'
+                        'Buah / Selingan'
                       ].map(fType => (
                         <option key={fType} value={fType}>{fType}</option>
                       ))}

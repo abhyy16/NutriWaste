@@ -44,7 +44,6 @@ export default function RecordWaste() {
     'Lauk Nabati': { menuName: '', comstockScale: null, standardWeight: '50' },
     'Sayuran': { menuName: '', comstockScale: null, standardWeight: '100' },
     'Buah / Selingan': { menuName: '', comstockScale: null, standardWeight: '50' },
-    'Semua (Komposit)': { menuName: '', comstockScale: null, standardWeight: '400' },
   });
 
   // Helper parsing comma-separated menu cycle items into categories
@@ -55,8 +54,7 @@ export default function RecordWaste() {
       'Lauk Hewani': '',
       'Lauk Nabati': '',
       'Sayuran': '',
-      'Buah / Selingan': '',
-      'Semua (Komposit)': ''
+      'Buah / Selingan': ''
     };
 
     parts.forEach(part => {
@@ -153,10 +151,6 @@ export default function RecordWaste() {
 
   // Update categories when foodItems (Menu) changes
   useEffect(() => {
-    const matchingMenu = menus.find(m => m.cycleDay === cycleDay && m.mealTime === mealTime);
-    const customMatchWeight = (matchingMenu as any)?.beratStandar || '';
-    const defaultTotalWeight = customMatchWeight || '400';
-
     if (foodItems) {
       const parsed = parseFoodItems(foodItems);
       setFoodRecords({
@@ -165,7 +159,6 @@ export default function RecordWaste() {
         'Lauk Nabati': { menuName: parsed['Lauk Nabati'] || '', comstockScale: null, standardWeight: '50' },
         'Sayuran': { menuName: parsed['Sayuran'] || '', comstockScale: null, standardWeight: '100' },
         'Buah / Selingan': { menuName: parsed['Buah / Selingan'] || '', comstockScale: null, standardWeight: '50' },
-        'Semua (Komposit)': { menuName: 'Menu Komposit / Campuran', comstockScale: null, standardWeight: defaultTotalWeight },
       });
     } else {
       setFoodRecords({
@@ -174,96 +167,9 @@ export default function RecordWaste() {
         'Lauk Nabati': { menuName: '', comstockScale: null, standardWeight: '50' },
         'Sayuran': { menuName: '', comstockScale: null, standardWeight: '100' },
         'Buah / Selingan': { menuName: '', comstockScale: null, standardWeight: '50' },
-        'Semua (Komposit)': { menuName: '', comstockScale: null, standardWeight: '400' },
       });
     }
   }, [foodItems, cycleDay, mealTime, menus]);
-
-  // Auto-calculate 'Semua (Komposit)' scale whenever non-composite scales change
-  useEffect(() => {
-    const nonCompositeKeys = [
-      'Makanan Pokok',
-      'Lauk Hewani',
-      'Lauk Nabati',
-      'Sayuran',
-      'Buah / Selingan'
-    ];
-    
-    // Sum the scales of active items (menuName is set) that have a selected comstock scale
-    const activeEntries = nonCompositeKeys.filter(key => foodRecords[key]?.menuName && foodRecords[key]?.comstockScale !== null);
-    
-    if (activeEntries.length > 0) {
-      const sum = activeEntries.reduce((acc, key) => acc + (foodRecords[key].comstockScale || 0), 0);
-      const avg = Math.round(sum / activeEntries.length);
-      
-      setFoodRecords(prev => {
-        if (prev['Semua (Komposit)'].comstockScale === avg) return prev;
-        return {
-          ...prev,
-          'Semua (Komposit)': {
-            ...prev['Semua (Komposit)'],
-            comstockScale: avg
-          }
-        };
-      });
-    } else {
-      setFoodRecords(prev => {
-        if (prev['Semua (Komposit)'].comstockScale === null) return prev;
-        return {
-          ...prev,
-          'Semua (Komposit)': {
-            ...prev['Semua (Komposit)'],
-            comstockScale: null
-          }
-        };
-      });
-    }
-  }, [
-    foodRecords['Makanan Pokok']?.comstockScale,
-    foodRecords['Lauk Hewani']?.comstockScale,
-    foodRecords['Lauk Nabati']?.comstockScale,
-    foodRecords['Sayuran']?.comstockScale,
-    foodRecords['Buah / Selingan']?.comstockScale,
-    foodRecords['Makanan Pokok']?.menuName,
-    foodRecords['Lauk Hewani']?.menuName,
-    foodRecords['Lauk Nabati']?.menuName,
-    foodRecords['Sayuran']?.menuName,
-    foodRecords['Buah / Selingan']?.menuName,
-  ]);
-
-  // Auto-calculate 'Semua (Komposit)' standardWeight whenever non-composite standardWeights change
-  useEffect(() => {
-    const nonCompositeKeys = [
-      'Makanan Pokok',
-      'Lauk Hewani',
-      'Lauk Nabati',
-      'Sayuran',
-      'Buah / Selingan'
-    ];
-    
-    // Sum standard weights of any active entries
-    const activeWeights = nonCompositeKeys.map(key => parseFloat(foodRecords[key]?.standardWeight) || 0);
-    const sum = activeWeights.reduce((acc, w) => acc + w, 0);
-    
-    if (sum > 0) {
-      setFoodRecords(prev => {
-        if (prev['Semua (Komposit)'].standardWeight === String(sum)) return prev;
-        return {
-          ...prev,
-          'Semua (Komposit)': {
-            ...prev['Semua (Komposit)'],
-            standardWeight: String(sum)
-          }
-        };
-      });
-    }
-  }, [
-    foodRecords['Makanan Pokok']?.standardWeight,
-    foodRecords['Lauk Hewani']?.standardWeight,
-    foodRecords['Lauk Nabati']?.standardWeight,
-    foodRecords['Sayuran']?.standardWeight,
-    foodRecords['Buah / Selingan']?.standardWeight,
-  ]);
 
   // Sync ward from profile if available
   useEffect(() => {
@@ -364,7 +270,6 @@ export default function RecordWaste() {
       'Lauk Nabati': { menuName: '', comstockScale: null, standardWeight: '50' },
       'Sayuran': { menuName: '', comstockScale: null, standardWeight: '100' },
       'Buah / Selingan': { menuName: '', comstockScale: null, standardWeight: '50' },
-      'Semua (Komposit)': { menuName: '', comstockScale: null, standardWeight: '400' },
     });
     setStep(1);
   };
@@ -658,7 +563,6 @@ export default function RecordWaste() {
               <div className="space-y-5">
                 {Object.entries(foodRecords).map(([fType, data]) => {
                   const hasSelectedScale = data.comstockScale !== null;
-                  const isComposite = fType === 'Semua (Komposit)';
                   return (
                     <div 
                       key={fType}
@@ -676,14 +580,9 @@ export default function RecordWaste() {
                           <div>
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{fType}</span>
-                              {isComposite && (
-                                <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase tracking-wider">Rerata Otomatis</span>
-                              )}
                             </div>
                             <div className="text-[10px] text-slate-400 font-bold italic mt-0.5 leading-none">
-                              {isComposite 
-                                ? 'Rerata dari sisa makanan pokok s/d buah/selingan'
-                                : (hasSelectedScale ? 'Skala sisa tercatat' : 'Sisa belum diisi / tidak disajikan')}
+                              {hasSelectedScale ? 'Skala sisa tercatat' : 'Sisa belum diisi / tidak disajikan'}
                             </div>
                           </div>
                         </div>
@@ -691,10 +590,9 @@ export default function RecordWaste() {
                           <input
                             type="text"
                             value={data.menuName}
-                            disabled={isComposite}
                             onChange={(e) => updateMenuName(fType, e.target.value)}
-                            placeholder={isComposite ? "Komposit / Campuran" : "Isi menu hidangan..."}
-                            className={`w-full px-4 py-2.5 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 text-xs font-bold text-slate-700 bg-slate-50/50 ${isComposite ? 'opacity-70 cursor-not-allowed italic' : ''}`}
+                            placeholder="Isi menu hidangan..."
+                            className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 text-xs font-bold text-slate-700 bg-slate-50/50"
                           />
                         </div>
                       </div>
@@ -708,18 +606,12 @@ export default function RecordWaste() {
                               type="number"
                               value={data.standardWeight || ''}
                               onChange={(e) => updateStandardWeight(fType, e.target.value)}
-                              disabled={isComposite}
                               placeholder="e.g. 150"
-                              className={`w-full px-3 py-1.5 pr-8 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-250 text-xs font-black text-slate-750 bg-slate-50/50 ${isComposite ? 'opacity-75 cursor-not-allowed text-emerald-600 bg-emerald-50' : ''}`}
+                              className="w-full px-3 py-1.5 pr-8 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-250 text-xs font-black text-slate-750 bg-slate-50/50"
                             />
                             <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">gr</span>
                           </div>
                         </div>
-                        {isComposite && (
-                          <div className="text-[10.5px] font-bold text-emerald-600 flex items-center gap-1 sm:justify-end">
-                            * Terkalkulasi otomatis dari jumlah porsi bahan pokok
-                          </div>
-                        )}
                       </div>
 
                       {/* Comstock horizontal selector buttons */}
@@ -730,14 +622,11 @@ export default function RecordWaste() {
                             <button
                               key={v.scale}
                               type="button"
-                              disabled={isComposite}
                               onClick={() => handleScaleClick(fType, v.scale)}
                               className={`py-3.5 px-1 rounded-xl transition-all duration-200 flex flex-col items-center justify-center gap-2 border group relative ${
                                 isCurrent
                                   ? 'bg-gradient-to-r from-emerald-600 to-teal-600 border-transparent text-white shadow-md shadow-emerald-600/15 scale-[1.03] z-10 font-bold'
-                                  : isComposite
-                                    ? 'bg-slate-100/50 border-slate-150 text-slate-300 cursor-not-allowed opacity-50'
-                                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800 hover:border-slate-300 font-bold'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800 hover:border-slate-300 font-bold'
                               }`}
                             >
                               {/* Custom Comstock Pie-Chart Circle Graphic (Visual indicator from image reference) */}
@@ -765,7 +654,7 @@ export default function RecordWaste() {
                         })}
                       </div>
 
-                      {/* Visualisasi untuk Semua (Komposit) & Kategori Lainnya */}
+                      {/* Visualisasi untuk Kategori Lainnya */}
                       {hasSelectedScale && (
                         <div className="mt-4 p-5 bg-gradient-to-r from-emerald-50/80 to-teal-50/80 rounded-[1.75rem] border border-emerald-100/80 shadow-sm flex flex-col sm:flex-row items-center gap-4">
                           {/* Left side: Beautiful large real-time Comstock pie-chart visualizer */}
@@ -790,9 +679,7 @@ export default function RecordWaste() {
                                 <span className="p-1 bg-emerald-100 rounded-full text-emerald-600 flex items-center justify-center">
                                   <UtensilsCrossed size={12} />
                                 </span>
-                                {isComposite 
-                                  ? 'Rerata Sisa Makanan Komposit:' 
-                                  : `Sisa Makanan ${fType}:`}
+                                {`Sisa Makanan ${fType}:`}
                               </span>
                               <span className="font-mono text-sm font-black text-emerald-700">
                                 {(() => {
@@ -829,7 +716,7 @@ export default function RecordWaste() {
               </div>
 
               <div className="p-4 bg-slate-50 rounded-[2rem] border border-slate-100 italic text-[10px] text-slate-500 text-center">
-                * Pilih dengan menekan skala sisa makan (0% sisa s.d. 100% sisa makanan). Tekan sekali lagi untuk membatalkan seleksi jika jenis makanan tidak disajikan. Skala sisa "Semua (Komposit)" akan terhitung sebagai rata-rata secara otomatis.
+                * Pilih dengan menekan skala sisa makan (0% sisa s.d. 100% sisa makanan). Tekan sekali lagi untuk membatalkan seleksi jika jenis makanan tidak disajikan.
               </div>
 
               <div className="pt-6 border-t border-slate-100 space-y-3">

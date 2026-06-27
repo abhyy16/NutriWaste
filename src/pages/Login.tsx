@@ -7,6 +7,8 @@ import { useState } from 'react';
 import { AlertCircle, LogIn, Fingerprint, MailCheck, ShieldAlert, User, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Role } from '../types';
+// @ts-ignore
+import nutriwasteLogo from '../assets/images/nutriwaste_logo_1782572222694.jpg';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -165,8 +167,8 @@ export default function Login() {
         className="max-w-md w-full bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 p-8 md:p-12 text-center"
       >
         <div className="mb-8">
-          <div className="w-20 h-20 bg-emerald-600 rounded-2xl mx-auto flex items-center justify-center mb-6 shadow-xl shadow-emerald-200">
-            <span className="text-white text-4xl font-bold italic">N</span>
+          <div className="w-20 h-20 mx-auto mb-6 shadow-xl shadow-emerald-250/20 rounded-[2rem] overflow-hidden bg-white flex items-center justify-center border border-slate-100">
+            <img src={nutriwasteLogo} alt="Nutriwaste Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-2">Nutriwaste</h1>
           <p className="text-slate-500 font-medium leading-tight px-4">Digitalisasi Pemantauan Sisa Makanan Rumah Sakit</p>

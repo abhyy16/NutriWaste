@@ -225,6 +225,7 @@ export default function Reports() {
   }, [selectedMonth]);
 
   const filteredTransactions = transactions.filter(t => {
+    if (t.foodType === 'Semua (Komposit)') return false;
     const nameMatch = searchQuery === '' || (t.patientName || '').toLowerCase().includes(searchQuery.toLowerCase());
     const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
     const mealTimeMatch = selectedMealTime === 'all' || t.mealTime === selectedMealTime;
@@ -250,13 +251,13 @@ export default function Reports() {
     'Lauk Hewani',
     'Lauk Nabati',
     'Sayuran',
-    'Buah / Selingan',
-    'Semua (Komposit)'
+    'Buah / Selingan'
   ];
 
   // Helper to filter transactions for specific charts with partial filter exclusion
   const getFilteredForChart = (excludeFilter: 'foodType' | 'mealTime' | 'dayOfWeek' | 'cycleDay') => {
     return transactions.filter(t => {
+      if (t.foodType === 'Semua (Komposit)') return false;
       const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
       
       const mealTimeMatch = excludeFilter === 'mealTime' || selectedMealTime === 'all' || t.mealTime === selectedMealTime;
@@ -282,9 +283,9 @@ export default function Reports() {
   const wasteByFoodType = foodTypes.map(fType => {
     const matchingTxs = getFilteredForChart('foodType').filter(t => (t.foodType || 'Makanan Pokok') === fType);
     const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
-    const count = matchingTxs.length;
-    const percentage = count > 0 ? (totalWaste / (count * 400)) * 105 : 0; // Adjusted scalar for visual contrast
-    return { label: fType, percentage: Math.min(percentage, 100), count };
+    const totalServed = matchingTxs.reduce((sum, t) => sum + (t.wasteWeight + t.consumptionWeight), 0);
+    const percentage = totalServed > 0 ? (totalWaste / totalServed) * 100 : 0;
+    return { label: fType, percentage: Math.min(percentage, 100), count: matchingTxs.length };
   });
 
   const activeFoodTypes = wasteByFoodType.filter(item => item.count > 0);
@@ -302,9 +303,9 @@ export default function Reports() {
   const wasteByMealTime = mealTimesList.map(mt => {
     const matchingTxs = getFilteredForChart('mealTime').filter(t => t.mealTime === mt.value);
     const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
-    const count = matchingTxs.length;
-    const percentage = count > 0 ? (totalWaste / (count * 400)) * 105 : 0;
-    return { label: mt.label, percentage: Math.min(percentage, 100), count };
+    const totalServed = matchingTxs.reduce((sum, t) => sum + (t.wasteWeight + t.consumptionWeight), 0);
+    const percentage = totalServed > 0 ? (totalWaste / totalServed) * 100 : 0;
+    return { label: mt.label, percentage: Math.min(percentage, 100), count: matchingTxs.length };
   });
 
   const activeMealTimes = wasteByMealTime.filter(item => item.count > 0);
@@ -327,9 +328,9 @@ export default function Reports() {
       return tDay === d.value;
     });
     const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
-    const count = matchingTxs.length;
-    const percentage = count > 0 ? (totalWaste / (count * 400)) * 105 : 0;
-    return { label: d.label, percentage: Math.min(percentage, 100), count };
+    const totalServed = matchingTxs.reduce((sum, t) => sum + (t.wasteWeight + t.consumptionWeight), 0);
+    const percentage = totalServed > 0 ? (totalWaste / totalServed) * 100 : 0;
+    return { label: d.label, percentage: Math.min(percentage, 100), count: matchingTxs.length };
   });
 
   const activeDays = wasteByDay.filter(item => item.count > 0);
@@ -342,9 +343,9 @@ export default function Reports() {
     const matchingMenuIds = menus.filter(m => m.cycleDay === cd).map(m => m.id);
     const matchingTxs = getFilteredForChart('cycleDay').filter(t => matchingMenuIds.includes(t.menuId));
     const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
-    const count = matchingTxs.length;
-    const percentage = count > 0 ? (totalWaste / (count * 400)) * 105 : 0;
-    return { label: `Hari ${cd}`, percentage: Math.min(percentage, 100), count };
+    const totalServed = matchingTxs.reduce((sum, t) => sum + (t.wasteWeight + t.consumptionWeight), 0);
+    const percentage = totalServed > 0 ? (totalWaste / totalServed) * 100 : 0;
+    return { label: `Hari ${cd}`, percentage: Math.min(percentage, 100), count: matchingTxs.length };
   });
 
   const activeCycles = wasteByCycle.filter(item => item.count > 0);
@@ -355,7 +356,8 @@ export default function Reports() {
     const data = filteredTransactions.map(t => {
       const menu = menus.find(m => m.id === t.menuId);
       const ward = wards.find(w => w.id === t.wardId);
-      const wastePercent = ((t.wasteWeight / 400) * 100).toFixed(1);
+      const stdWeight = t.wasteWeight + t.consumptionWeight;
+      const wastePercent = stdWeight > 0 ? ((t.wasteWeight / stdWeight) * 100).toFixed(1) : '0';
 
       return {
         'Tanggal': format(t.timestamp || new Date(), 'dd/MM/yyyy'),
@@ -371,7 +373,7 @@ export default function Reports() {
         'Waktu Makan': (t.mealTime || '').replace('_', ' ').toUpperCase(),
         'Jenis Makanan': t.foodType || 'Makanan Pokok',
         'Berat Sisa (g)': t.wasteWeight,
-        'Berat Standar (g)': 400,
+        'Berat Standar (g)': stdWeight || 400,
         'Persentase Waste (%)': wastePercent,
         'Alasan': t.reason || '-',
         'Petugas Entry': t.staffName || '-'
@@ -396,7 +398,8 @@ export default function Reports() {
 
     const tableData = filteredTransactions.map(t => {
       const ward = wards.find(w => w.id === t.wardId);
-      const wastePercent = ((t.wasteWeight / 400) * 100).toFixed(0);
+      const stdWeight = t.wasteWeight + t.consumptionWeight;
+      const wastePercent = stdWeight > 0 ? ((t.wasteWeight / stdWeight) * 100).toFixed(0) : '0';
 
       return [
         format(t.timestamp || new Date(), 'dd/MM/yy'),
