@@ -16,8 +16,8 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-emerald-600 border-t-transparent shadow-lg shadow-emerald-100"></div>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#5da281] via-[#4d8c6d] to-[#3e755b]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-emerald-600 border-t-transparent shadow-md shadow-emerald-950/20"></div>
       </div>
     );
   }

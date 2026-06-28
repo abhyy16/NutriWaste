@@ -249,7 +249,7 @@ export default function Dashboard() {
             <p className="text-sm font-display font-black text-white tracking-wide">{format(new Date(), 'dd MMMM yyyy')}</p>
           </div>
           <div className="w-px h-10 bg-white/10 hidden sm:block mx-2" />
-          <Link to="/record" className="px-7 py-3.5 bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 rounded-2xl font-display font-extrabold text-sm tracking-wide flex items-center gap-2 px-6 py-4 bg-emerald-600 hover:scale-[1.03] active:scale-[0.98] hover:shadow-lg hover:shadow-emerald-400/20 transition-all duration-300">
+          <Link to="/record" className="px-7 py-3.5 bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 rounded-2xl font-display font-extrabold text-sm tracking-wide flex items-center gap-2 px-6 py-4 bg-emerald-600 hover:scale-[1.03] active:scale-[0.98] hover:shadow-lg hover:shadow-emerald-950/20 transition-all duration-300">
             <Utensils size={16} strokeWidth={3} />
             <span>Input Sisa Makan</span>
           </Link>
@@ -258,8 +258,8 @@ export default function Dashboard() {
 
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h2>
-          <p className="text-slate-500">Analisis sisa makanan real-time dan KPI Rumah Sakit</p>
+          <h2 className="text-3xl font-display font-black text-white tracking-tight drop-shadow-sm">Dashboard</h2>
+          <p className="text-emerald-50 text-sm font-semibold">Analisis sisa makanan real-time dan KPI Rumah Sakit</p>
         </div>
         <div className="flex gap-2">
           <div className="relative">
@@ -277,7 +277,7 @@ export default function Dashboard() {
           </div>
           <Link 
             to="/reports"
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-950/20"
           >
             <Download size={16} /> Ekspor Laporan
           </Link>
@@ -801,7 +801,7 @@ export default function Dashboard() {
                     </button>
                     <button 
                       type="submit"
-                      className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 flex items-center justify-center gap-2"
+                      className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-950/20 flex items-center justify-center gap-2"
                     >
                       <Save size={18} /> Simpan Perubahan
                     </button>

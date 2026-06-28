@@ -162,8 +162,8 @@ export default function MasterData() {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">Data Master</h2>
-          <p className="text-slate-500">Kelola database jenis diet dan unit/bangsal rumah sakit</p>
+          <h2 className="text-3xl font-display font-black text-white tracking-tight drop-shadow-sm">Data Master</h2>
+          <p className="text-emerald-50 text-sm font-semibold">Kelola database jenis diet dan unit/bangsal rumah sakit</p>
         </div>
         <div className="flex bg-slate-200/50 p-1 rounded-xl w-fit items-center gap-2">
           <button
@@ -258,7 +258,7 @@ export default function MasterData() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-md shadow-emerald-950/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
@@ -289,7 +289,7 @@ export default function MasterData() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-md shadow-emerald-950/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>

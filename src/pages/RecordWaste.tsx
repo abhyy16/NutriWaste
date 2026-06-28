@@ -278,25 +278,25 @@ export default function RecordWaste() {
     <div className="max-w-2xl mx-auto space-y-6 pb-24 md:pb-8">
       <header className="mb-2 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Input Sisa Makan</h2>
-          <p className="text-slate-500 font-medium italic">Digitalisasi pencatatan porsi sisa pasien</p>
+          <h2 className="text-3xl font-display font-black text-white tracking-tight drop-shadow-sm">Input Sisa Makan</h2>
+          <p className="text-emerald-50 font-medium">Digitalisasi pencatatan porsi sisa pasien</p>
         </div>
-        <div className="bg-white border border-slate-100 rounded-2xl px-5 py-3 shadow-sm flex items-center gap-3 self-start md:self-auto">
-          <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600 animate-pulse">
+        <div className="bg-smooth-olive border border-slate-300/50 rounded-2xl px-5 py-3 shadow-sm flex items-center gap-3 self-start md:self-auto">
+          <div className="bg-emerald-700/10 p-2 rounded-xl text-emerald-800 animate-pulse">
             <Clock size={18} />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-tight">Waktu Real-time</p>
-            <p className="text-lg font-black text-slate-700 leading-tight">
+            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest leading-tight">Waktu Real-time</p>
+            <p className="text-lg font-black text-slate-800 leading-tight">
               {format(currentTime, 'HH:mm:ss')}
-              <span className="text-[10px] font-bold text-slate-400 ml-2">{format(currentTime, 'dd MMM')}</span>
+              <span className="text-[10px] font-bold text-slate-500 ml-2">{format(currentTime, 'dd MMM')}</span>
             </p>
           </div>
         </div>
       </header>
 
       {/* Staff Info Card */}
-      <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-[2.5rem] p-6.5 text-white shadow-xl shadow-emerald-600/10 flex items-center justify-between overflow-hidden relative border border-emerald-500/10">
+      <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-[2.5rem] p-6.5 text-white shadow-xl shadow-emerald-950/20 flex items-center justify-between overflow-hidden relative border border-emerald-500/10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_30%,rgba(255,255,255,0.08),transparent_50%)] pointer-events-none" />
         <div className="relative z-10 space-y-1">
           <p className="text-[9px] font-black uppercase tracking-widest text-emerald-200 block mb-1">Petugas Aktif</p>
@@ -307,23 +307,23 @@ export default function RecordWaste() {
       </div>
 
       {/* Progress Indicator */}
-      <div className="flex items-center gap-3 bg-white/80 backdrop-blur-md px-6 py-4.5 rounded-[2rem] border border-slate-200 shadow-sm justify-between">
-        <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-400 font-display">Progres Langkah</span>
+      <div className="flex items-center gap-3 bg-smooth-olive px-6 py-4.5 rounded-[2rem] border border-slate-300/50 shadow-sm justify-between">
+        <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-700 font-display">Progres Langkah</span>
         <div className="flex gap-2 w-32 items-center">
           {[1, 2].map((i) => (
             <div 
               key={i}
               className={`h-2 flex-1 rounded-full transition-all duration-350 ${
                 step === i 
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 shadow-sm ring-2 ring-emerald-100' 
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-700 shadow-sm ring-2 ring-emerald-200' 
                   : step > i 
-                    ? 'bg-emerald-500' 
-                    : 'bg-slate-200'
+                    ? 'bg-emerald-600' 
+                    : 'bg-slate-300'
               }`}
             />
           ))}
         </div>
-        <span className="text-xs font-black text-emerald-600 font-display">Langkah {step} dari 2</span>
+        <span className="text-xs font-black text-emerald-800 font-display">Langkah {step} dari 2</span>
       </div>
 
       <AnimatePresence>
@@ -349,47 +349,47 @@ export default function RecordWaste() {
             className="space-y-4"
           >
             {/* Patient & Room Info */}
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-200 space-y-6 shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <User size={18} className="text-emerald-600" />
+            <div className="bg-smooth-olive p-6 rounded-[2rem] border border-slate-300/50 space-y-6 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-300/40 pb-3">
+                <h3 className="font-bold text-slate-850 flex items-center gap-2">
+                  <User size={18} className="text-emerald-850" />
                   Data Pasien & Ruangan
                 </h3>
-                <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full uppercase tracking-widest">Wajib Diisi</span>
+                <span className="text-[10px] font-black bg-emerald-700 text-white px-3 py-1 rounded-full uppercase tracking-widest">Wajib Diisi</span>
               </div>
 
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-6 gap-4">
                   <div className="sm:col-span-3 space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nama Pasien</label>
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Nama Pasien</label>
                     <input
                       type="text"
                       value={patientName}
                       onChange={(e) => setPatientName(e.target.value)}
                       placeholder="Nama lengkap pasien"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 placeholder:font-normal placeholder:text-slate-300"
+                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
                     />
                   </div>
                   <div className="grid grid-cols-3 sm:grid-cols-3 sm:col-span-3 gap-4">
                     <div className="col-span-1 space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Umur</label>
+                      <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Umur</label>
                       <input
                         type="number"
                         value={patientAge}
                         onChange={(e) => setPatientAge(e.target.value)}
                         placeholder="Thn"
-                        className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
+                        className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
                       />
                     </div>
                     <div className="col-span-2 space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">JK</label>
-                      <div className="flex bg-slate-100 p-1 rounded-2xl h-[58px]">
+                      <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">JK</label>
+                      <div className="flex bg-slate-200/60 p-1 rounded-2xl h-[58px]">
                         {(['L', 'P'] as const).map(g => (
                           <button
                             key={g}
                             type="button"
                             onClick={() => setPatientGender(g)}
-                            className={`flex-1 flex items-center justify-center text-xs font-black rounded-xl transition-all ${patientGender === g ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                            className={`flex-1 flex items-center justify-center text-xs font-black rounded-xl transition-all ${patientGender === g ? 'bg-white text-emerald-800 shadow-sm font-black' : 'text-slate-600 hover:text-slate-850'}`}
                           >
                             {g === 'L' ? 'LAKI' : 'PEREMPUAN'}
                           </button>
@@ -401,47 +401,47 @@ export default function RecordWaste() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Unit / Ruangan</label>
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Unit / Ruangan</label>
                     <select 
                       value={wardId}
                       onChange={(e) => handleWardChange(e.target.value)}
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
+                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800"
                     >
                       <option value="">-- Pilih Unit --</option>
                       {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Petugas PJ Ruangan</label>
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Petugas PJ Ruangan</label>
                     <input
                       type="text"
                       value={staffInCharge}
                       onChange={(e) => setStaffInCharge(e.target.value)}
                       placeholder="Nama penanggung jawab"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
+                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
                     />
                   </div>
                 </div>
                 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">No. Kamar</label>
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">No. Kamar</label>
                     <input
                       type="text"
                       value={roomNumber}
                       onChange={(e) => setRoomNumber(e.target.value)}
                       placeholder="Cth: 101"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
+                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">No. Bed / Ranjang</label>
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">No. Bed / Ranjang</label>
                     <input
                       type="text"
                       value={bedNumber}
                       onChange={(e) => setBedNumber(e.target.value)}
                       placeholder="Cth: A"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
+                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
                     />
                   </div>
                 </div>
@@ -449,20 +449,20 @@ export default function RecordWaste() {
             </div>
 
             {/* Menu & Diet Info */}
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-200 space-y-6 shadow-sm">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <UtensilsCrossed size={18} className="text-emerald-600" />
+            <div className="bg-smooth-olive p-6 rounded-[2rem] border border-slate-300/50 space-y-6 shadow-sm">
+              <h3 className="font-bold text-slate-850 flex items-center gap-2">
+                <UtensilsCrossed size={18} className="text-emerald-850" />
                 Menu & Siklus Hari
               </h3>
               
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hari Siklus</label>
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Hari Siklus</label>
                     <select
                       value={cycleDay}
                       onChange={(e) => setCycleDay(Number(e.target.value))}
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
+                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800"
                     >
                       {[1, 2, 3, 4, 5, 6, 7].map(d => (
                         <option key={d} value={d}>Hari ke-{d}</option>
@@ -470,14 +470,14 @@ export default function RecordWaste() {
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Jenis Diet</label>
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Jenis Diet</label>
                     <input
                       type="text"
                       list="diet-list"
                       value={dietType}
                       onChange={(e) => setDietType(e.target.value)}
                       placeholder="Cth: Biasa, RD, RG"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700"
+                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
                     />
                     <datalist id="diet-list">
                       <option value="Biasa" />
@@ -490,8 +490,8 @@ export default function RecordWaste() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Waktu Makan</label>
-                  <div className="flex bg-slate-100 p-1.5 rounded-2xl overflow-x-auto no-scrollbar">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Waktu Makan</label>
+                  <div className="flex bg-slate-200/60 p-1.5 rounded-2xl overflow-x-auto no-scrollbar">
                     {([
                       { id: 'sarapan', label: 'Sarapan' },
                       { id: 'selingan_1', label: 'Selingan 1' },
@@ -503,7 +503,7 @@ export default function RecordWaste() {
                         key={m.id}
                         type="button"
                         onClick={() => setMealTime(m.id)}
-                        className={`min-w-[80px] flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${mealTime === m.id ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                        className={`min-w-[80px] flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${mealTime === m.id ? 'bg-white text-emerald-800 shadow-sm font-black' : 'text-slate-600 hover:text-slate-850'}`}
                       >
                         {m.label.toUpperCase()}
                       </button>
@@ -512,15 +512,15 @@ export default function RecordWaste() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Detail Menu Terdeteksi</label>
+                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Detail Menu Terdeteksi</label>
                   <textarea
                     value={foodItems}
                     onChange={(e) => setFoodItems(e.target.value)}
                     placeholder="Isi menu hari ini..."
-                    className="w-full px-4 py-4 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-600 min-h-[80px] text-sm italic bg-slate-50/50"
+                    className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 min-h-[80px] text-sm"
                   />
                   {!foodItems && (
-                    <p className="text-[10px] text-amber-600 font-bold italic ml-1">* Menu belum diatur di Siklus Menu</p>
+                    <p className="text-[10px] text-amber-850 bg-amber-500/10 px-2 py-1 rounded-lg font-bold italic ml-1">* Menu belum diatur di Siklus Menu</p>
                   )}
                 </div>
               </div>
@@ -530,7 +530,7 @@ export default function RecordWaste() {
               id="next-step-btn"
               disabled={!patientName || !wardId}
               onClick={() => setStep(2)}
-              className="w-full bg-emerald-600 text-white font-black py-4 sm:py-5 rounded-2xl sm:rounded-[2rem] shadow-xl shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-300 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
+              className="w-full bg-emerald-600 text-white font-black py-4 sm:py-5 rounded-2xl sm:rounded-[2rem] shadow-md shadow-emerald-950/20 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-300 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
             >
               Lanjutkan ke Skala Comstock
             </button>
@@ -543,17 +543,17 @@ export default function RecordWaste() {
             exit={{ opacity: 0, x: -20 }}
             className="space-y-6"
           >
-            <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="bg-smooth-olive p-6 sm:p-8 rounded-[2rem] border border-slate-300/50 shadow-sm relative overflow-hidden space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-300/40 pb-4">
                 <div>
-                  <h3 className="font-bold text-slate-800 text-xl">
+                  <h3 className="font-bold text-slate-850 text-xl">
                     Skala Comstock Sisa Makanan
                   </h3>
-                  <p className="text-xs text-slate-400 font-bold italic mt-0.5">Pilih sisa makanan per kategori dalam sekali input</p>
+                  <p className="text-xs text-slate-700 font-bold italic mt-0.5">Pilih sisa makanan per kategori dalam sekali input</p>
                 </div>
                 <button 
                   onClick={() => setStep(1)} 
-                  className="text-emerald-600 text-xs font-black bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-full transition-all"
+                  className="text-emerald-850 text-xs font-black bg-white hover:bg-slate-50 px-4 py-2 rounded-full transition-all border border-slate-300/40"
                 >
                   Ubah Info Pasien
                 </button>
@@ -568,20 +568,20 @@ export default function RecordWaste() {
                       key={fType}
                       className={`p-5 rounded-[2rem] border-2 transition-all duration-300 space-y-4 bg-white ${
                         hasSelectedScale 
-                          ? 'border-emerald-500 shadow-md shadow-emerald-500/5 ring-4 ring-emerald-50' 
-                          : 'border-slate-100 hover:border-slate-200 shadow-sm'
+                          ? 'border-emerald-600 shadow-md ring-4 ring-emerald-600/10' 
+                          : 'border-slate-200/80 hover:border-slate-300 shadow-sm'
                       }`}
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-xl transition-all ${hasSelectedScale ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                          <div className={`p-2 rounded-xl transition-all ${hasSelectedScale ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
                             <UtensilsCrossed size={16} />
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{fType}</span>
                             </div>
-                            <div className="text-[10px] text-slate-400 font-bold italic mt-0.5 leading-none">
+                            <div className="text-[10px] text-slate-600 font-bold italic mt-0.5 leading-none">
                               {hasSelectedScale ? 'Skala sisa tercatat' : 'Sisa belum diisi / tidak disajikan'}
                             </div>
                           </div>
@@ -592,30 +592,30 @@ export default function RecordWaste() {
                             value={data.menuName}
                             onChange={(e) => updateMenuName(fType, e.target.value)}
                             placeholder="Isi menu hidangan..."
-                            className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-100 text-xs font-bold text-slate-700 bg-slate-50/50"
+                            className="w-full px-4 py-2.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 text-xs font-bold text-slate-800 placeholder:text-slate-400"
                           />
                         </div>
                       </div>
 
                       {/* Standar Menu Column in gr - added before selecting percentage */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-1 border-t border-slate-100 pt-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-1 border-t border-slate-200/60 pt-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-black tracking-wider text-slate-400 uppercase">Standar Menu:</span>
+                          <span className="text-[11px] font-black tracking-wider text-slate-700 uppercase">Standar Menu:</span>
                           <div className="relative max-w-[120px]">
                             <input
                               type="number"
                               value={data.standardWeight || ''}
                               onChange={(e) => updateStandardWeight(fType, e.target.value)}
                               placeholder="e.g. 150"
-                              className="w-full px-3 py-1.5 pr-8 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-250 text-xs font-black text-slate-750 bg-slate-50/50"
+                              className="w-full px-3 py-1.5 pr-8 rounded-lg border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-250 text-xs font-black text-slate-800 placeholder:text-slate-400"
                             />
-                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">gr</span>
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-500">gr</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Comstock horizontal selector buttons */}
-                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 bg-slate-50/70 p-2.5 rounded-2xl border border-slate-150">
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 bg-slate-100 p-2.5 rounded-2xl border border-slate-200/80">
                         {COMSTOCK_VALUES.map((v) => {
                           const isCurrent = data.comstockScale === v.scale;
                           return (
@@ -656,17 +656,17 @@ export default function RecordWaste() {
 
                       {/* Visualisasi untuk Kategori Lainnya */}
                       {hasSelectedScale && (
-                        <div className="mt-4 p-5 bg-gradient-to-r from-emerald-50/80 to-teal-50/80 rounded-[1.75rem] border border-emerald-100/80 shadow-sm flex flex-col sm:flex-row items-center gap-4">
+                        <div className="mt-4 p-5 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-[1.75rem] border border-emerald-200 shadow-sm flex flex-col sm:flex-row items-center gap-4">
                           {/* Left side: Beautiful large real-time Comstock pie-chart visualizer */}
                           <div className="relative shrink-0">
                             <div 
-                              className="w-12 h-12 rounded-full border-2 border-emerald-600 bg-slate-50 shadow-sm transition-all duration-300"
+                              className="w-12 h-12 rounded-full border-2 border-emerald-700 bg-white shadow-sm transition-all duration-300"
                               style={{
                                 background: `conic-gradient(#059669 ${(COMSTOCK_VALUES.find(v => v.scale === data.comstockScale)?.percentage || 0)}%, #f1f5f9 ${(COMSTOCK_VALUES.find(v => v.scale === data.comstockScale)?.percentage || 0)}%)`
                               }}
                             />
                             <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="text-[9px] font-mono font-black text-emerald-800 bg-white/90 px-1 py-0.5 rounded shadow-sm scale-90 border border-emerald-100">
+                              <span className="text-[9px] font-mono font-black text-emerald-950 bg-white px-1.5 py-0.5 rounded shadow-sm scale-90 border border-emerald-300">
                                 {data.comstockScale !== undefined && data.comstockScale !== null ? `(${data.comstockScale})` : '-'}
                               </span>
                             </div>
@@ -674,14 +674,14 @@ export default function RecordWaste() {
 
                           {/* Right side: Title, percentage text, and slider */}
                           <div className="flex-1 w-full space-y-2">
-                            <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
                               <span className="flex items-center gap-1.5">
-                                <span className="p-1 bg-emerald-100 rounded-full text-emerald-600 flex items-center justify-center">
+                                <span className="p-1 bg-emerald-100 rounded-full text-emerald-800 flex items-center justify-center">
                                   <UtensilsCrossed size={12} />
                                 </span>
                                 {`Sisa Makanan ${fType}:`}
                               </span>
-                              <span className="font-mono text-sm font-black text-emerald-700">
+                              <span className="font-mono text-sm font-black text-emerald-900">
                                 {(() => {
                                   const matched = COMSTOCK_VALUES.find(v => v.scale === data.comstockScale);
                                   return matched ? matched.percentage : 0;
@@ -697,12 +697,12 @@ export default function RecordWaste() {
                               />
                               <div 
                                 style={{ left: `${(COMSTOCK_VALUES.find(v => v.scale === data.comstockScale)?.percentage || 0)}%` }}
-                                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-4.5 h-4.5 bg-white border-2 border-emerald-605 rounded-full shadow flex items-center justify-center transition-all duration-300 pointer-events-none"
+                                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-4.5 h-4.5 bg-white border-2 border-emerald-600 rounded-full shadow flex items-center justify-center transition-all duration-300 pointer-events-none"
                               >
-                                <div className="w-1.5 h-1.5 bg-emerald-650 rounded-full animate-ping" />
+                                <div className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-ping" />
                               </div>
                             </div>
-                            <div className="flex justify-between text-[9px] text-slate-430 font-extrabold uppercase tracking-wider px-1">
+                            <div className="flex justify-between text-[9px] text-slate-650 font-extrabold uppercase tracking-wider px-1">
                               <span>Habis (0%)</span>
                               <span>Setengah (50%)</span>
                               <span>Utuh (100%)</span>
@@ -715,13 +715,13 @@ export default function RecordWaste() {
                 })}
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-[2rem] border border-slate-100 italic text-[10px] text-slate-500 text-center">
+              <div className="p-4 bg-white rounded-[2rem] border border-slate-300/60 italic text-[10.5px] text-slate-700 text-center font-medium">
                 * Pilih dengan menekan skala sisa makan (0% sisa s.d. 100% sisa makanan). Tekan sekali lagi untuk membatalkan seleksi jika jenis makanan tidak disajikan.
               </div>
 
-              <div className="pt-6 border-t border-slate-100 space-y-3">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <ClipboardCheck size={18} className="text-emerald-600" />
+              <div className="pt-6 border-t border-slate-300/40 space-y-3">
+                <h3 className="font-bold text-slate-850 flex items-center gap-2">
+                  <ClipboardCheck size={18} className="text-emerald-850" />
                   Alasan Sisa Makan (Opsional - Jika ada sisa)
                 </h3>
                 <div className="space-y-3">
@@ -729,12 +729,12 @@ export default function RecordWaste() {
                     <select
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
-                      className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-700 appearance-none"
+                      className="w-full px-5 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 appearance-none"
                     >
                       <option value="">-- Pilih Alasan (Opsional) --</option>
                       {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                     </div>
                   </div>
@@ -745,13 +745,13 @@ export default function RecordWaste() {
                       animate={{ opacity: 1, y: 0 }}
                       className="space-y-1.5"
                     >
-                      <label className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest ml-1">Ketik Alasan Lainnya</label>
+                      <label className="text-[10px] font-bold text-emerald-800 uppercase tracking-widest ml-1">Ketik Alasan Lainnya</label>
                       <input
                         type="text"
                         value={customReason}
                         onChange={(e) => setCustomReason(e.target.value)}
                         placeholder="Masukkan alasan kustom..."
-                        className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold text-slate-700"
+                        className="w-full px-5 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold text-slate-850 placeholder:text-slate-400"
                       />
                     </motion.div>
                   )}
@@ -771,7 +771,7 @@ export default function RecordWaste() {
                 id="submit-record-btn"
                 disabled={isSubmitting}
                 onClick={handleSubmit}
-                className="flex-[2] bg-emerald-600 text-white font-black py-4 sm:py-5 rounded-2xl sm:rounded-[2rem] shadow-xl shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
+                className="flex-[2] bg-emerald-600 text-white font-black py-4 sm:py-5 rounded-2xl sm:rounded-[2rem] shadow-md shadow-emerald-950/20 hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
               >
                 {isSubmitting ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>

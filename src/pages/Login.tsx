@@ -160,14 +160,14 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#5da281] via-[#4d8c6d] to-[#3e755b] flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="max-w-md w-full bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 p-8 md:p-12 text-center"
       >
         <div className="mb-8">
-          <div className="w-20 h-20 mx-auto mb-6 shadow-xl shadow-emerald-250/20 rounded-[2rem] overflow-hidden bg-white flex items-center justify-center border border-slate-100">
+          <div className="w-20 h-20 mx-auto mb-6 shadow-md shadow-emerald-950/20 rounded-[2rem] overflow-hidden bg-white flex items-center justify-center border border-slate-100">
             <img src={nutriwasteLogo} alt="Nutriwaste Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-2">Nutriwaste</h1>
@@ -256,7 +256,7 @@ export default function Login() {
             id="login-submit-btn"
             type="submit"
             disabled={isLoading}
-            className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 mt-4"
+            className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-md shadow-emerald-950/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 mt-4"
           >
             {isLoading ? (
               <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>

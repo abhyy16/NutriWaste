@@ -6,6 +6,8 @@
   --font-display: "Plus Jakarta Sans", "Inter", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
+  --color-smooth-olive: #c2d3c7;
+
   /* Custom animations helper */
   --animate-fade-in-up: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   --animate-pulse-subtle: pulse-subtle 3s ease-in-out infinite;
@@ -35,7 +37,8 @@
 
 @layer base {
   body {
-    @apply font-sans text-slate-800 bg-[#f8fafc];
+    @apply font-sans text-slate-800 bg-gradient-to-br from-[#5da281] via-[#4d8c6d] to-[#3e755b] bg-no-repeat min-h-screen;
+    background-attachment: fixed;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 

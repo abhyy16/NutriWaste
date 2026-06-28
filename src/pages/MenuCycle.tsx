@@ -301,8 +301,8 @@ export default function MenuCycle() {
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Siklus Menu</h2>
-          <p className="text-slate-500 text-sm">Kelola siklus menu makanan secara fleksibel dan nyaman</p>
+          <h2 className="text-3xl font-display font-black text-white tracking-tight drop-shadow-sm">Siklus Menu</h2>
+          <p className="text-emerald-50 text-sm font-semibold">Kelola siklus menu makanan secara fleksibel dan nyaman</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {/* View Mode Toggle */}
@@ -345,7 +345,7 @@ export default function MenuCycle() {
             type="button"
             onClick={saveCycle}
             disabled={saving}
-            className="px-6 py-2.5 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center gap-2 disabled:opacity-50 text-xs"
+            className="px-6 py-2.5 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-950/20 flex items-center gap-2 disabled:opacity-50 text-xs"
           >
             {saving ? <RefreshCw className="animate-spin" size={15} /> : <Save size={15} />}
             Simpan Siklus

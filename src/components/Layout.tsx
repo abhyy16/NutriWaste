@@ -71,7 +71,7 @@ export default function Layout() {
               className={`
                 flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group
                 ${isActive 
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold shadow-md shadow-emerald-500/20' 
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold shadow-md shadow-emerald-950/20' 
                   : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
                 ${isMobile ? 'text-base py-4' : 'text-sm'}
               `}
@@ -115,7 +115,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-tr from-slate-50 via-emerald-50/15 to-teal-50/15 flex flex-col md:flex-row relative overflow-x-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-[#5da281] via-[#4d8c6d] to-[#3e755b] flex flex-col md:flex-row relative overflow-x-hidden">
       {/* Subtle ambient decorative blur circles */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-100/10 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse-subtle" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-100/10 rounded-full blur-[100px] pointer-events-none -z-10" />

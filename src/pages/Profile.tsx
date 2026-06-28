@@ -136,7 +136,7 @@ export default function Profile() {
           >
             <ArrowLeft size={20} />
           </button>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Profil Petugas</h2>
+          <h2 className="text-2xl font-display font-black text-white tracking-tight drop-shadow-sm">Profil Petugas</h2>
         </div>
         <button 
           onClick={handleLogout}
@@ -302,7 +302,7 @@ export default function Profile() {
               <button
                 type="submit"
                 disabled={isLoading || isUploading}
-                className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 mt-4 disabled:opacity-50"
+                className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-md shadow-emerald-950/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 mt-4 disabled:opacity-50"
               >
                 {isLoading ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>

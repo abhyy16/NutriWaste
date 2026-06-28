@@ -429,8 +429,8 @@ export default function Reports() {
     <div className="space-y-8 pb-12">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Laporan Bulanan</h2>
-          <p className="text-slate-500">Ekspor data sisa makanan ke format Excel</p>
+          <h2 className="text-3xl font-display font-black text-white tracking-tight drop-shadow-sm">Laporan Bulanan</h2>
+          <p className="text-emerald-50 text-sm font-semibold">Ekspor data sisa makanan ke format Excel</p>
         </div>
         <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200">
            <div className="flex items-center gap-2 px-3 text-slate-400">
@@ -461,7 +461,7 @@ export default function Reports() {
            <button 
              onClick={exportToExcel}
              disabled={filteredTransactions.length === 0}
-             className="flex items-center justify-center gap-2 px-4 py-4 bg-white border border-emerald-200 text-emerald-700 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-lg shadow-emerald-100/50 disabled:opacity-50 disabled:shadow-none text-xs sm:text-base"
+             className="flex items-center justify-center gap-2 px-4 py-4 bg-white border border-emerald-200 text-emerald-700 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-md disabled:opacity-50 disabled:shadow-none text-xs sm:text-base"
            >
              <FileDown size={18} />
              <span>Excel</span>
@@ -469,7 +469,7 @@ export default function Reports() {
            <button 
              onClick={exportToPDF}
              disabled={filteredTransactions.length === 0}
-             className="flex items-center justify-center gap-2 px-4 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50 disabled:shadow-none text-xs sm:text-base"
+             className="flex items-center justify-center gap-2 px-4 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-950/20 disabled:opacity-50 disabled:shadow-none text-xs sm:text-base"
            >
              <FileDown size={18} />
              <span>PDF</span>
@@ -757,7 +757,7 @@ export default function Reports() {
                   </div>
                   <div>
                     <h4 className="font-display font-black text-lg tracking-tight">Profil & Riwayat Pasien</h4>
-                    <p className="text-xs text-emerald-100 font-bold uppercase tracking-widest mt-0.5">Asesmen & Analisis Sisa Makan Comstock</p>
+                    <p className="text-xs text-emerald-50 font-bold uppercase tracking-widest mt-0.5">Asesmen & Analisis Sisa Makan Comstock</p>
                   </div>
                 </div>
                 <button 
@@ -857,7 +857,7 @@ export default function Reports() {
                     <button 
                       type="button"
                       onClick={() => exportPatientToPDF(selectedTx.patientName)}
-                      className="flex items-center justify-center gap-1.5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs shadow hover:shadow-emerald-100 transition cursor-pointer"
+                      className="flex items-center justify-center gap-1.5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs shadow hover:shadow-emerald-950/20 transition cursor-pointer"
                     >
                       <FileDown size={14} />
                       <span>Unduh PDF</span>
