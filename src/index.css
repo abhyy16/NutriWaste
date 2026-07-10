@@ -6,7 +6,7 @@
   --font-display: "Plus Jakarta Sans", "Inter", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-smooth-olive: #c2d3c7;
+  --color-smooth-olive: #f1f6f3;
 
   /* Custom animations helper */
   --animate-fade-in-up: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -37,7 +37,7 @@
 
 @layer base {
   body {
-    @apply font-sans text-slate-800 bg-gradient-to-br from-[#5da281] via-[#4d8c6d] to-[#3e755b] bg-no-repeat min-h-screen;
+    @apply font-sans text-slate-800 bg-gradient-to-br from-[#f3f7f4] via-[#eaf0eb] to-[#dde8e0] bg-no-repeat min-h-screen;
     background-attachment: fixed;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
@@ -53,7 +53,15 @@
   }
   
   ::-webkit-scrollbar-thumb {
-    @apply bg-slate-200 rounded-full transition-colors hover:bg-slate-300;
+    @apply bg-slate-200/60 rounded-full transition-colors hover:bg-slate-300/80;
+  }
+
+  /* Emil Kowalski - Active press feel for buttons/interactive elements */
+  .btn-press {
+    @apply transition-transform duration-100 ease-out;
+  }
+  .btn-press:active {
+    transform: scale(0.97);
   }
 }
 

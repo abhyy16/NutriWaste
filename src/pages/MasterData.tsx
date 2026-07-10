@@ -162,8 +162,8 @@ export default function MasterData() {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-display font-black text-white tracking-tight drop-shadow-sm">Data Master</h2>
-          <p className="text-emerald-50 text-sm font-semibold">Kelola database jenis diet dan unit/bangsal rumah sakit</p>
+          <h2 className="text-3xl font-display font-black text-slate-850 tracking-tight">Data Master</h2>
+          <p className="text-slate-500 text-sm font-semibold">Kelola database jenis diet dan unit/bangsal rumah sakit</p>
         </div>
         <div className="flex bg-slate-200/50 p-1 rounded-xl w-fit items-center gap-2">
           <button

@@ -278,8 +278,8 @@ export default function RecordWaste() {
     <div className="max-w-2xl mx-auto space-y-6 pb-24 md:pb-8">
       <header className="mb-2 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-display font-black text-white tracking-tight drop-shadow-sm">Input Sisa Makan</h2>
-          <p className="text-emerald-50 font-medium">Digitalisasi pencatatan porsi sisa pasien</p>
+          <h2 className="text-3xl font-display font-black text-slate-850 tracking-tight">Input Sisa Makan</h2>
+          <p className="text-slate-500 font-semibold">Digitalisasi pencatatan porsi sisa pasien</p>
         </div>
         <div className="bg-smooth-olive border border-slate-300/50 rounded-2xl px-5 py-3 shadow-sm flex items-center gap-3 self-start md:self-auto">
           <div className="bg-emerald-700/10 p-2 rounded-xl text-emerald-800 animate-pulse">

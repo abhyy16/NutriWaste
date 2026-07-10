@@ -136,7 +136,7 @@ export default function Profile() {
           >
             <ArrowLeft size={20} />
           </button>
-          <h2 className="text-2xl font-display font-black text-white tracking-tight drop-shadow-sm">Profil Petugas</h2>
+          <h2 className="text-2xl font-display font-black text-slate-850 tracking-tight">Profil Petugas</h2>
         </div>
         <button 
           onClick={handleLogout}

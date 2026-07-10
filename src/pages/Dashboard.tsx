@@ -258,8 +258,8 @@ export default function Dashboard() {
 
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-display font-black text-white tracking-tight drop-shadow-sm">Dashboard</h2>
-          <p className="text-emerald-50 text-sm font-semibold">Analisis sisa makanan real-time dan KPI Rumah Sakit</p>
+          <h2 className="text-3xl font-display font-black text-slate-850 tracking-tight">Dashboard</h2>
+          <p className="text-slate-500 text-sm font-semibold">Analisis sisa makanan real-time dan KPI Rumah Sakit</p>
         </div>
         <div className="flex gap-2">
           <div className="relative">

@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { auth } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X, FileText, User, Utensils, WifiOff } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Database, LogOut, Menu as MenuIcon, X, FileText, User, Utensils, WifiOff, Workflow } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
@@ -43,6 +43,7 @@ export default function Layout() {
     ...(isAdmin ? [
       { name: 'Data Master', path: '/master', icon: Database },
     ] : []),
+    { name: 'Alur & Spesifikasi', path: '/system-flow', icon: Workflow },
   ];
 
   const SidebarContent = ({ isMobile = false }) => (
@@ -115,7 +116,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#5da281] via-[#4d8c6d] to-[#3e755b] flex flex-col md:flex-row relative overflow-x-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-[#f3f7f4] via-[#eaf0eb] to-[#dde8e0] flex flex-col md:flex-row relative overflow-x-hidden">
       {/* Subtle ambient decorative blur circles */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-100/10 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse-subtle" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-100/10 rounded-full blur-[100px] pointer-events-none -z-10" />

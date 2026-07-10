@@ -9,6 +9,7 @@ import MasterData from './pages/MasterData';
 import MenuCycle from './pages/MenuCycle';
 import Profile from './pages/Profile';
 import Reports from './pages/Reports';
+import SystemFlow from './pages/SystemFlow';
 import Layout from './components/Layout';
 
 export default function App() {
@@ -16,7 +17,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#5da281] via-[#4d8c6d] to-[#3e755b]">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#f3f7f4] via-[#eaf0eb] to-[#dde8e0]">
         <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-emerald-600 border-t-transparent shadow-md shadow-emerald-950/20"></div>
       </div>
     );
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="master" element={isAdminOrNutritionist ? <MasterData /> : <Navigate to="/" />} />
           <Route path="menu-cycle" element={isAdminOrNutritionist ? <MenuCycle /> : <Navigate to="/" />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="system-flow" element={<SystemFlow />} />
           <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>

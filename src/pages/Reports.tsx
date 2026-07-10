@@ -429,8 +429,8 @@ export default function Reports() {
     <div className="space-y-8 pb-12">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-display font-black text-white tracking-tight drop-shadow-sm">Laporan Bulanan</h2>
-          <p className="text-emerald-50 text-sm font-semibold">Ekspor data sisa makanan ke format Excel</p>
+          <h2 className="text-3xl font-display font-black text-slate-850 tracking-tight">Laporan Bulanan</h2>
+          <p className="text-slate-500 text-sm font-semibold">Ekspor data sisa makanan ke format Excel</p>
         </div>
         <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200">
            <div className="flex items-center gap-2 px-3 text-slate-400">
