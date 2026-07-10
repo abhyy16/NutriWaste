@@ -116,7 +116,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f3f7f4] via-[#eaf0eb] to-[#dde8e0] flex flex-col md:flex-row relative overflow-x-hidden">
+    <div className="min-h-screen md:h-screen md:max-h-screen bg-gradient-to-br from-[#f3f7f4] via-[#eaf0eb] to-[#dde8e0] flex flex-col md:flex-row relative overflow-x-hidden md:overflow-y-hidden">
       {/* Subtle ambient decorative blur circles */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-100/10 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse-subtle" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-100/10 rounded-full blur-[100px] pointer-events-none -z-10" />
@@ -174,7 +174,7 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-8 lg:p-12 pb-36 md:pb-8 lg:pb-12 max-w-7xl mx-auto w-full z-10">
+      <main className="flex-1 p-4 md:p-8 lg:p-12 pb-36 md:pb-8 lg:pb-12 max-w-7xl mx-auto w-full z-10 md:overflow-y-auto md:h-full">
         <Outlet />
       </main>
 
