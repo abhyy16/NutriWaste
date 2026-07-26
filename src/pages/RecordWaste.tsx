@@ -3,7 +3,7 @@ import { collection, addDoc, getDocs, serverTimestamp, query, orderBy } from 'fi
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Menu, Ward, COMSTOCK_VALUES, MealTime } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { ClipboardCheck, CheckCircle2, User, Building2, UtensilsCrossed, Clock } from 'lucide-react';
+import { ClipboardCheck, CheckCircle2, User, Building2, UtensilsCrossed, Clock, Calculator } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { format } from 'date-fns';
@@ -23,15 +23,16 @@ export default function RecordWaste() {
 
   // Form State
   const [patientName, setPatientName] = useState('');
+  const [medicalRecordNumber, setMedicalRecordNumber] = useState('');
   const [patientAge, setPatientAge] = useState('');
   const [patientGender, setPatientGender] = useState<'L' | 'P'>('L');
+  const [wardName, setWardName] = useState('');
   const [roomNumber, setRoomNumber] = useState('');
-  const [bedNumber, setBedNumber] = useState('');
   const [staffInCharge, setStaffInCharge] = useState('');
   const [dietType, setDietType] = useState('Biasa');
   const [wardId, setWardId] = useState(profile?.assignedWardId || '');
   const [cycleDay, setCycleDay] = useState<number>(1);
-  const [mealTime, setMealTime] = useState<MealTime>('sarapan');
+  const [mealTime, setMealTime] = useState<MealTime>('makan_siang');
   const [menuId, setMenuId] = useState('');
   const [foodItems, setFoodItems] = useState('');
   const [reason, setReason] = useState('');
@@ -115,7 +116,7 @@ export default function RecordWaste() {
 
   const COMSTOCK_REFERENCE = [
     { scale: 0, desc: '0% (Habis Total)' },
-    { scale: 1, desc: '25% (Sisa 1/4)' },
+    { scale: 1, desc: '20% (Sisa 1/5)' },
     { scale: 2, desc: '50% (Sisa 1/2)' },
     { scale: 3, desc: '75% (Sisa 3/4)' },
     { scale: 4, desc: '95% (Hampir Utuh)' },
@@ -179,15 +180,24 @@ export default function RecordWaste() {
   }, [profile]);
 
   // Persist ward selection to profile
-  const handleWardChange = (id: string) => {
-    setWardId(id);
-    if (id) {
-      setAssignedWard(id);
+  const handleWardChange = (val: string) => {
+    const selectedWard = wards.find(w => w.id === val || w.name === val);
+    if (selectedWard) {
+      setWardId(selectedWard.id);
+      setWardName(selectedWard.name);
+      setAssignedWard(selectedWard.id);
+    } else {
+      setWardId(val || 'manual_ward');
+      setWardName(val);
     }
   };
 
   const handleSubmit = async () => {
-    if (!profile || !wardId || !patientName) return;
+    const effectiveWard = wardName || wardId;
+    if (!profile || !effectiveWard || !patientName) {
+      setError('Mohon lengkapi Nama Pasien dan Ruang Rawat / Unit.');
+      return;
+    }
     
     // Check if at least one scale is selected
     const activeRecords = Object.entries(foodRecords).filter(([_, data]) => data.comstockScale !== null);
@@ -200,22 +210,26 @@ export default function RecordWaste() {
     setError(null);
 
     try {
+      const selectedWardObj = wards.find(w => w.id === wardId);
+      const finalWardName = wardName || selectedWardObj?.name || wardId;
+
       const promises = activeRecords.map(([fType, data]) => {
         const scaleObj = COMSTOCK_VALUES.find(v => v.scale === data.comstockScale);
-        const stdW = parseFloat(data.standardWeight) || 400;
+        const stdW = parseFloat(data.standardWeight) || 100;
         const wasteWeight = scaleObj ? (stdW * (scaleObj.percentage / 100)) : 0;
         const consumptionWeight = stdW - wasteWeight;
 
         return addDoc(collection(db, 'transactions'), {
           patientName,
+          medicalRecordNumber: medicalRecordNumber || '-',
           patientAge: Number(patientAge) || 0,
           patientGender,
-          wardId,
-          roomNumber,
-          bedNumber,
-          staffInCharge,
-          dietType,
-          mealTime,
+          wardId: wardId || 'manual',
+          wardName: finalWardName,
+          roomNumber: roomNumber || '-',
+          staffInCharge: staffInCharge || '-',
+          dietType: dietType || 'Biasa',
+          mealTime: 'makan_siang', // Strict lunch measurement
           foodType: fType, // e.g., 'Makanan Pokok', 'Lauk Hewani', etc.
           menuId: menuId || 'manual',
           comstockScale: data.comstockScale,
@@ -253,10 +267,11 @@ export default function RecordWaste() {
 
   const resetForm = () => {
     setPatientName('');
+    setMedicalRecordNumber('');
     setPatientAge('');
     setPatientGender('L');
+    setWardName('');
     setRoomNumber('');
-    setBedNumber('');
     setStaffInCharge('');
     setDietType('Biasa');
     // Ward is kept for session persistence
@@ -359,57 +374,83 @@ export default function RecordWaste() {
               </div>
 
               <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-6 gap-4">
-                  <div className="sm:col-span-3 space-y-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Nama Pasien</label>
                     <input
                       type="text"
                       value={patientName}
                       onChange={(e) => setPatientName(e.target.value)}
                       placeholder="Nama lengkap pasien"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
+                      className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
                     />
                   </div>
-                  <div className="grid grid-cols-3 sm:grid-cols-3 sm:col-span-3 gap-4">
-                    <div className="col-span-1 space-y-1">
-                      <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Umur</label>
-                      <input
-                        type="number"
-                        value={patientAge}
-                        onChange={(e) => setPatientAge(e.target.value)}
-                        placeholder="Thn"
-                        className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
-                      />
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-emerald-800 uppercase tracking-widest ml-1">NOMER REKAM MEDIS (NO. RM)</label>
+                    <input
+                      type="text"
+                      value={medicalRecordNumber}
+                      onChange={(e) => setMedicalRecordNumber(e.target.value)}
+                      placeholder="Cth: RM-2024-001"
+                      className="w-full px-4 py-3.5 rounded-2xl border border-emerald-300 bg-emerald-50/30 outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Umur</label>
+                    <input
+                      type="number"
+                      value={patientAge}
+                      onChange={(e) => setPatientAge(e.target.value)}
+                      placeholder="Thn"
+                      className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Jenis Kelamin</label>
+                    <div className="flex bg-slate-200/60 p-1 rounded-2xl h-[52px]">
+                      {(['L', 'P'] as const).map(g => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setPatientGender(g)}
+                          className={`flex-1 flex items-center justify-center text-xs font-black rounded-xl transition-all ${patientGender === g ? 'bg-white text-emerald-800 shadow-sm font-black' : 'text-slate-600 hover:text-slate-850'}`}
+                        >
+                          {g === 'L' ? 'LAKI-LAKI' : 'PEREMPUAN'}
+                        </button>
+                      ))}
                     </div>
-                    <div className="col-span-2 space-y-1">
-                      <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">JK</label>
-                      <div className="flex bg-slate-200/60 p-1 rounded-2xl h-[58px]">
-                        {(['L', 'P'] as const).map(g => (
-                          <button
-                            key={g}
-                            type="button"
-                            onClick={() => setPatientGender(g)}
-                            className={`flex-1 flex items-center justify-center text-xs font-black rounded-xl transition-all ${patientGender === g ? 'bg-white text-emerald-800 shadow-sm font-black' : 'text-slate-600 hover:text-slate-850'}`}
-                          >
-                            {g === 'L' ? 'LAKI' : 'PEREMPUAN'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Detail Ruang Rawat / No. Kamar</label>
+                    <input
+                      type="text"
+                      value={roomNumber}
+                      onChange={(e) => setRoomNumber(e.target.value)}
+                      placeholder="Cth: Ruang Melati / 102"
+                      className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
+                    />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Unit / Ruangan</label>
-                    <select 
-                      value={wardId}
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Ruang Rawat / Unit (Dapat Diisi Manual)</label>
+                    <input
+                      type="text"
+                      list="ward-list"
+                      value={wardName}
                       onChange={(e) => handleWardChange(e.target.value)}
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800"
-                    >
-                      <option value="">-- Pilih Unit --</option>
-                      {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                    </select>
+                      placeholder="Ketik atau pilih nama ruang rawat..."
+                      className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
+                    />
+                    <datalist id="ward-list">
+                      {wards.map(w => (
+                        <option key={w.id} value={w.name} />
+                      ))}
+                    </datalist>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Petugas PJ Ruangan</label>
@@ -418,30 +459,7 @@ export default function RecordWaste() {
                       value={staffInCharge}
                       onChange={(e) => setStaffInCharge(e.target.value)}
                       placeholder="Nama penanggung jawab"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">No. Kamar</label>
-                    <input
-                      type="text"
-                      value={roomNumber}
-                      onChange={(e) => setRoomNumber(e.target.value)}
-                      placeholder="Cth: 101"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">No. Bed / Ranjang</label>
-                    <input
-                      type="text"
-                      value={bedNumber}
-                      onChange={(e) => setBedNumber(e.target.value)}
-                      placeholder="Cth: A"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
+                      className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
                     />
                   </div>
                 </div>
@@ -490,20 +508,19 @@ export default function RecordWaste() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Waktu Makan</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Waktu Makan</label>
+                    <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full uppercase">Pengukuran Makan Siang</span>
+                  </div>
                   <div className="flex bg-slate-200/60 p-1.5 rounded-2xl overflow-x-auto no-scrollbar">
                     {([
-                      { id: 'sarapan', label: 'Sarapan' },
-                      { id: 'selingan_1', label: 'Selingan 1' },
-                      { id: 'makan_siang', label: 'Siang' },
-                      { id: 'selingan_2', label: 'Selingan 2' },
-                      { id: 'makan_malam', label: 'Malam' }
+                      { id: 'makan_siang', label: 'Makan Siang (Sisa Makanan)' },
                     ] as { id: MealTime, label: string }[]).map(m => (
                       <button
                         key={m.id}
                         type="button"
                         onClick={() => setMealTime(m.id)}
-                        className={`min-w-[80px] flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${mealTime === m.id ? 'bg-white text-emerald-800 shadow-sm font-black' : 'text-slate-600 hover:text-slate-850'}`}
+                        className="w-full py-3 text-xs font-black rounded-xl transition-all bg-white text-emerald-800 shadow-sm"
                       >
                         {m.label.toUpperCase()}
                       </button>
@@ -597,22 +614,7 @@ export default function RecordWaste() {
                         </div>
                       </div>
 
-                      {/* Standar Menu Column in gr - added before selecting percentage */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-1 border-t border-slate-200/60 pt-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-black tracking-wider text-slate-700 uppercase">Standar Menu:</span>
-                          <div className="relative max-w-[120px]">
-                            <input
-                              type="number"
-                              value={data.standardWeight || ''}
-                              onChange={(e) => updateStandardWeight(fType, e.target.value)}
-                              placeholder="e.g. 150"
-                              className="w-full px-3 py-1.5 pr-8 rounded-lg border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-250 text-xs font-black text-slate-800 placeholder:text-slate-400"
-                            />
-                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-500">gr</span>
-                          </div>
-                        </div>
-                      </div>
+
 
                       {/* Comstock horizontal selector buttons */}
                       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 bg-slate-100 p-2.5 rounded-2xl border border-slate-200/80">
@@ -645,7 +647,7 @@ export default function RecordWaste() {
                               <div className="flex flex-col items-center text-center">
                                 <span className="text-[11px] leading-tight font-black">{v.percentage}%</span>
                                 <span className="text-[8px] opacity-80 leading-none font-bold mt-0.5">
-                                  {v.scale === 0 ? 'Habis' : v.scale === 1 ? 'Sisa 1/4' : v.scale === 2 ? 'Sisa 1/2' : v.scale === 3 ? 'Sisa 3/4' : v.scale === 4 ? '95%' : 'Utuh'}
+                                  {v.scale === 0 ? 'Habis' : v.scale === 1 ? 'Sisa 1/5' : v.scale === 2 ? 'Sisa 1/2' : v.scale === 3 ? 'Sisa 3/4' : v.scale === 4 ? '95%' : 'Utuh'}
                                 </span>
                                 <span className="text-[7.5px] opacity-60 font-mono mt-0.5 font-bold">({v.scale})</span>
                               </div>
@@ -718,6 +720,75 @@ export default function RecordWaste() {
               <div className="p-4 bg-white rounded-[2rem] border border-slate-300/60 italic text-[10.5px] text-slate-700 text-center font-medium">
                 * Pilih dengan menekan skala sisa makan (0% sisa s.d. 100% sisa makanan). Tekan sekali lagi untuk membatalkan seleksi jika jenis makanan tidak disajikan.
               </div>
+
+              {/* Box Perhitungan Total Skor Comstock (Sesuai Rumus Standar) */}
+              {(() => {
+                const activeEntries = Object.entries(foodRecords).filter(([_, d]) => d.comstockScale !== null);
+                const totalScore = activeEntries.reduce((sum, [_, d]) => sum + (d.comstockScale || 0), 0);
+                const totalItems = activeEntries.length;
+                const maxDenominator = totalItems * 5;
+                const finalPercentage = maxDenominator > 0 ? (totalScore / maxDenominator) * 100 : 0;
+
+                const scaleCounts = [0, 1, 2, 3, 4, 5].map(s => ({
+                  scale: s,
+                  count: activeEntries.filter(([_, d]) => d.comstockScale === s).length
+                }));
+
+                return (
+                  <div className="p-6 bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-900 text-white rounded-[2rem] border border-emerald-800/50 shadow-xl space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-emerald-500/20 rounded-2xl text-emerald-300 border border-emerald-500/30">
+                          <Calculator size={22} />
+                        </div>
+                        <div>
+                          <h4 className="font-display font-black text-base text-white">Perhitungan Skor Comstock</h4>
+                          <p className="text-xs text-emerald-200/80 font-medium">Rumus: (Total Skor ÷ [Total Jenis Menu × 5]) × 100%</p>
+                        </div>
+                      </div>
+                      <div className="bg-white/10 px-4 py-2 rounded-2xl border border-white/10 flex items-center justify-between sm:justify-end gap-3">
+                        <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-300">Hasil Sisa Makanan</span>
+                        <span className="font-mono text-2xl font-black text-emerald-400">{finalPercentage.toFixed(1)}%</span>
+                      </div>
+                    </div>
+
+                    {totalItems > 0 ? (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                          <div className="bg-white/5 p-3.5 rounded-2xl border border-white/10">
+                            <span className="text-[10px] text-slate-300 font-extrabold block uppercase tracking-wider">Total Skor Nilai (Pembilang)</span>
+                            <span className="font-mono font-black text-xl text-emerald-300 mt-1 block">{totalScore}</span>
+                            <span className="text-[10px] text-slate-400 block mt-1">
+                              Rincian: {scaleCounts.filter(c => c.count > 0).map(c => `${c.count}×(skala ${c.scale})`).join(' + ') || '0'}
+                            </span>
+                          </div>
+
+                          <div className="bg-white/5 p-3.5 rounded-2xl border border-white/10">
+                            <span className="text-[10px] text-slate-300 font-extrabold block uppercase tracking-wider">Maksimal Skor (Penyebut)</span>
+                            <span className="font-mono font-black text-xl text-teal-300 mt-1 block">{maxDenominator}</span>
+                            <span className="text-[10px] text-slate-400 block mt-1">{totalItems} jenis menu × 5 (skala maks)</span>
+                          </div>
+
+                          <div className="bg-white/5 p-3.5 rounded-2xl border border-white/10 flex flex-col justify-between">
+                            <span className="text-[10px] text-slate-300 font-extrabold uppercase tracking-wider">Kalkulasi Matematika</span>
+                            <div className="font-mono font-bold text-sm text-amber-300 mt-1">
+                              ({totalScore} / {maxDenominator}) × 100% = <span className="text-emerald-300 underline font-black">{finalPercentage.toFixed(1)}%</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-3.5 bg-emerald-950/60 rounded-xl border border-emerald-800/50 text-[10.5px] text-emerald-200/90 leading-relaxed font-medium">
+                          <strong>Standar Skala Comstock:</strong> 0 = 0% | 1 = 20% | 2 = 50% | 3 = 75% | 4 = 95% | 5 = 100%. Total nilai skor diperoleh dari hasil perkalian jumlah centangan dengan skala nilai di setiap baris menu.
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-300 italic text-center py-2">
+                        Pilih skala Comstock pada hidangan di atas untuk melihat kalkulasi persentase dan rumus skor otomatis.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="pt-6 border-t border-slate-300/40 space-y-3">
                 <h3 className="font-bold text-slate-850 flex items-center gap-2">

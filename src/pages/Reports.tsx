@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Transaction, Menu, Ward } from '../types';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search, X, Info, FileText, Activity, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search, X, Info, FileText, Activity, ShieldCheck, ChevronDown, ChevronUp, Pencil, Edit3, Save, CheckCircle2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -111,6 +111,20 @@ export default function Reports() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [showFilters, setShowFilters] = useState<boolean>(false);
+
+  // Tab & Patient Editing States
+  const [viewTab, setViewTab] = useState<'rekap_pasien' | 'record_detail'>('rekap_pasien');
+  const [editingPatient, setEditingPatient] = useState<{
+    patientKey: string;
+    medicalRecordNumber: string;
+    patientName: string;
+    patientGender: string;
+    patientAge: number;
+    wardName: string;
+    roomNumber: string;
+    dietType: string;
+  } | null>(null);
+  const [savingPatient, setSavingPatient] = useState(false);
 
   const exportPatientToExcel = (patientName: string) => {
     const pTxs = transactions.filter(t => t.patientName.toLowerCase() === patientName.toLowerCase());
@@ -245,6 +259,139 @@ export default function Reports() {
     
     return nameMatch && wardMatch && mealTimeMatch && foodTypeMatch && dayOfWeekMatch && cycleDayMatch;
   });
+
+  // Calculate Recapitulation Per Patient
+  const patientRecapMap = new Map<string, {
+    patientKey: string;
+    medicalRecordNumber: string;
+    patientName: string;
+    patientGender: string;
+    patientAge: number;
+    wardName: string;
+    roomNumber: string;
+    dietType: string;
+    totalAssessments: number;
+    totalComstockScore: number;
+    totalComstockMax: number;
+    totalWasteWeight: number;
+    totalServedWeight: number;
+    sampleTx: Transaction;
+  }>();
+
+  filteredTransactions.forEach(t => {
+    const key = (t.medicalRecordNumber || t.patientName || 'Unknown').trim().toLowerCase();
+    const existing = patientRecapMap.get(key);
+    const stdW = (t.wasteWeight + t.consumptionWeight) || 400;
+    const cScale = t.comstockScale !== undefined && t.comstockScale !== null ? t.comstockScale : 0;
+
+    if (!existing) {
+      patientRecapMap.set(key, {
+        patientKey: key,
+        medicalRecordNumber: t.medicalRecordNumber || '-',
+        patientName: t.patientName,
+        patientGender: t.patientGender || 'L',
+        patientAge: t.patientAge || 0,
+        wardName: t.wardName || wards.find(w => w.id === t.wardId)?.name || 'Ruang Rawat',
+        roomNumber: t.roomNumber || '-',
+        dietType: t.dietType || 'Biasa',
+        totalAssessments: 1,
+        totalComstockScore: cScale,
+        totalComstockMax: 5,
+        totalWasteWeight: t.wasteWeight,
+        totalServedWeight: stdW,
+        sampleTx: t
+      });
+    } else {
+      existing.totalAssessments += 1;
+      existing.totalComstockScore += cScale;
+      existing.totalComstockMax += 5;
+      existing.totalWasteWeight += t.wasteWeight;
+      existing.totalServedWeight += stdW;
+    }
+  });
+
+  const patientRecaps = Array.from(patientRecapMap.values()).map(pr => {
+    // Formula: (Total Comstock Score / [Total Items Evaluated * 5]) * 100%
+    const wastePercentage = pr.totalComstockMax > 0
+      ? (pr.totalComstockScore / pr.totalComstockMax) * 100
+      : (pr.totalServedWeight > 0 ? (pr.totalWasteWeight / pr.totalServedWeight) * 100 : 0);
+    return {
+      ...pr,
+      wastePercentage
+    };
+  });
+
+  const handleSavePatientEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPatient) return;
+
+    setSavingPatient(true);
+    try {
+      const matchingTxs = transactions.filter(t => 
+        (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() === editingPatient.patientKey ||
+        t.patientName.toLowerCase() === editingPatient.patientName.toLowerCase()
+      );
+
+      const promises = matchingTxs.map(t => {
+        const txRef = doc(db, 'transactions', t.id);
+        return updateDoc(txRef, {
+          medicalRecordNumber: editingPatient.medicalRecordNumber || null,
+          patientName: editingPatient.patientName,
+          patientGender: editingPatient.patientGender,
+          patientAge: Number(editingPatient.patientAge) || 0,
+          wardName: editingPatient.wardName,
+          roomNumber: editingPatient.roomNumber || null,
+          dietType: editingPatient.dietType || 'Biasa'
+        });
+      });
+
+      await Promise.all(promises);
+
+      setTransactions(prev => prev.map(t => {
+        const isMatch = (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() === editingPatient.patientKey ||
+          t.patientName.toLowerCase() === editingPatient.patientName.toLowerCase();
+        
+        if (!isMatch) return t;
+        return {
+          ...t,
+          medicalRecordNumber: editingPatient.medicalRecordNumber,
+          patientName: editingPatient.patientName,
+          patientGender: editingPatient.patientGender,
+          patientAge: Number(editingPatient.patientAge),
+          wardName: editingPatient.wardName,
+          roomNumber: editingPatient.roomNumber,
+          dietType: editingPatient.dietType
+        };
+      }));
+
+      setEditingPatient(null);
+    } catch (err) {
+      console.error("Gagal memperbarui data pasien:", err);
+    } finally {
+      setSavingPatient(false);
+    }
+  };
+
+  const exportPatientRecapToExcel = () => {
+    const data = patientRecaps.map(pr => ({
+      'No. Rekam Medis': pr.medicalRecordNumber,
+      'Nama Pasien': pr.patientName,
+      'JK': pr.patientGender,
+      'Umur': pr.patientAge,
+      'Ruang Rawat / Unit': pr.wardName,
+      'No. Kamar': pr.roomNumber,
+      'Jenis Diet': pr.dietType,
+      'Jumlah Asesmen (Makan Siang)': pr.totalAssessments,
+      'Total Sisa (gram)': pr.totalWasteWeight,
+      'Persentase Sisa Makanan (%)': pr.wastePercentage.toFixed(1) + '%',
+      'Status Efisiensi': pr.wastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Rekapitulasi Pasien');
+    XLSX.writeFile(wb, `Rekapitulasi_Sisa_Makan_Pasien_${selectedMonth}.xlsx`);
+  };
 
   const foodTypes = [
     'Makanan Pokok',
@@ -639,45 +786,180 @@ export default function Reports() {
       )}
 
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-           <h3 className="font-bold text-slate-800 flex items-center gap-2">
-             <TableIcon size={18} className="text-emerald-600" />
-             Preview Data
-           </h3>
-           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-             Tampilkan {filteredTransactions.length} record terfilter
-           </span>
+        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+           <div className="flex items-center gap-3">
+             <div className="flex bg-slate-100 p-1 rounded-2xl">
+               <button
+                 type="button"
+                 onClick={() => setViewTab('rekap_pasien')}
+                 className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+                   viewTab === 'rekap_pasien'
+                   ? 'bg-white text-emerald-700 shadow-sm'
+                   : 'text-slate-500 hover:text-slate-800'
+                 }`}
+               >
+                 Rekapitulasi Pasien ({patientRecaps.length})
+               </button>
+               <button
+                 type="button"
+                 onClick={() => setViewTab('record_detail')}
+                 className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+                   viewTab === 'record_detail'
+                   ? 'bg-white text-emerald-700 shadow-sm'
+                   : 'text-slate-500 hover:text-slate-800'
+                 }`}
+               >
+                 Log Detail ({filteredTransactions.length})
+               </button>
+             </div>
+           </div>
+
+           {viewTab === 'rekap_pasien' && (
+             <button
+               type="button"
+               onClick={exportPatientRecapToExcel}
+               disabled={patientRecaps.length === 0}
+               className="flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold hover:bg-emerald-100 transition shadow-sm cursor-pointer"
+             >
+               <FileDown size={14} />
+               <span>Unduh Rekap Pasien (Excel)</span>
+             </button>
+           )}
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Pasien</th>
-                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Unit</th>
-                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Diet</th>
-                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Waktu</th>
-                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Jenis Makanan</th>
-                <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-right">Waste</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td colSpan={6} className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
-                  </tr>
-                ))
-              ) : filteredTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
-                    Tidak ada data yang cocok dengan kriteria filter.
-                  </td>
+        {viewTab === 'rekap_pasien' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">No. Rekam Medis</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Nama Pasien</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Ruang Rawat / Unit</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Diet</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Asesmen (Siang)</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">% Sisa Makanan</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Status</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-right">Aksi</th>
                 </tr>
-              ) : (
-                filteredTransactions.map(t => {
-                  const menu = menus.find(m => m.id === t.menuId);
-                  const ward = wards.find(w => w.id === t.wardId);
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td colSpan={8} className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
+                    </tr>
+                  ))
+                ) : patientRecaps.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-12 text-center text-slate-400 italic">
+                      Tidak ada data rekapitulasi pasien untuk kriteria ini.
+                    </td>
+                  </tr>
+                ) : (
+                  patientRecaps.map(pr => {
+                    const isHighWaste = pr.wastePercentage > 20;
+                    return (
+                      <tr key={pr.patientKey} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 font-mono font-bold text-slate-700">
+                          {pr.medicalRecordNumber}
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="font-extrabold text-slate-800 leading-tight">
+                            {pr.patientName} ({pr.patientGender})
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                            {pr.patientAge ? `${pr.patientAge} th` : '-'}
+                          </p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-slate-700 font-bold">{pr.wardName}</p>
+                          <p className="text-[10px] text-slate-400">Kamar: {pr.roomNumber}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-[10px] font-extrabold rounded uppercase">
+                            {pr.dietType}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center font-bold text-slate-600">
+                          {pr.totalAssessments}x
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`font-mono font-black text-sm ${isHighWaste ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {pr.wastePercentage.toFixed(1)}%
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            isHighWaste 
+                            ? 'bg-rose-50 text-rose-600 border border-rose-200' 
+                            : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                          }`}>
+                            {isHighWaste ? 'Sisa Tinggi (>20%)' : 'Efisien (≤20%)'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingPatient({
+                              patientKey: pr.patientKey,
+                              medicalRecordNumber: pr.medicalRecordNumber === '-' ? '' : pr.medicalRecordNumber,
+                              patientName: pr.patientName,
+                              patientGender: pr.patientGender,
+                              patientAge: pr.patientAge,
+                              wardName: pr.wardName,
+                              roomNumber: pr.roomNumber === '-' ? '' : pr.roomNumber,
+                              dietType: pr.dietType
+                            })}
+                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition border border-slate-200"
+                            title="Edit Data Pasien"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTx(pr.sampleTx)}
+                            className="px-3 py-1.5 bg-emerald-600 text-white font-bold rounded-xl text-xs hover:bg-emerald-700 transition"
+                          >
+                            Detail
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Pasien</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Unit / Kamar</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Diet</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Waktu</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Jenis Makanan</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-right">Waste</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td colSpan={6} className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
+                    </tr>
+                  ))
+                ) : filteredTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
+                      Tidak ada data yang cocok dengan kriteria filter.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTransactions.map(t => {
+                    const menu = menus.find(m => m.id === t.menuId);
+                    const ward = wards.find(w => w.id === t.wardId);
                     return (
                       <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4">
@@ -691,10 +973,13 @@ export default function Reports() {
                               {t.patientName} ({t.patientGender || '-'})
                               <span className="opacity-0 group-hover:opacity-100 transition-all font-black bg-emerald-50 text-emerald-700 text-[8px] px-1.5 py-0.5 rounded uppercase tracking-wider">Detail</span>
                             </p>
-                            <p className="text-[10px] text-slate-400 font-bold group-hover:text-slate-500 transition-colors mt-0.5">BED: {t.bedNumber || '-'}</p>
+                            <p className="text-[10px] text-slate-400 font-bold group-hover:text-slate-500 transition-colors mt-0.5">RM: {t.medicalRecordNumber || '-'}</p>
                           </button>
                         </td>
-                        <td className="px-6 py-4 text-slate-600 font-medium">{ward?.name}</td>
+                        <td className="px-6 py-4 text-slate-600 font-medium">
+                          {t.wardName || ward?.name || 'Rawat Inap'}
+                          <span className="text-[10px] text-slate-400 block font-normal">Kamar: {t.roomNumber || '-'}</span>
+                        </td>
                         <td className="px-6 py-4">
                            <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded uppercase">{t.dietType || 'Biasa'}</span>
                         </td>
@@ -720,12 +1005,144 @@ export default function Reports() {
                         </td>
                       </tr>
                     );
-                })
-              )}
-            </tbody>
-          </table>
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Edit Patient Modal Dialog */}
+      {editingPatient && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 15 }}
+            className="bg-white rounded-[2.5rem] border border-slate-200 w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col"
+          >
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-8 py-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/10 rounded-2xl">
+                  <Edit3 size={22} className="text-white" />
+                </div>
+                <div>
+                  <h4 className="font-display font-black text-lg">Edit Data Pasien</h4>
+                  <p className="text-xs text-emerald-100">Perbarui identitas & informasi medis pasien</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setEditingPatient(null)}
+                className="p-2 hover:bg-white/10 rounded-xl transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePatientEdit} className="p-8 space-y-5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase">No. Rekam Medis</label>
+                <input 
+                  type="text"
+                  value={editingPatient.medicalRecordNumber}
+                  onChange={e => setEditingPatient({...editingPatient, medicalRecordNumber: e.target.value})}
+                  placeholder="RM-XXXXXX"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase">Nama Pasien</label>
+                <input 
+                  type="text"
+                  value={editingPatient.patientName}
+                  onChange={e => setEditingPatient({...editingPatient, patientName: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Jenis Kelamin</label>
+                  <select 
+                    value={editingPatient.patientGender}
+                    onChange={e => setEditingPatient({...editingPatient, patientGender: e.target.value})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                  >
+                    <option value="L">Laki-Laki (L)</option>
+                    <option value="P">Perempuan (P)</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Umur (Tahun)</label>
+                  <input 
+                    type="number"
+                    value={editingPatient.patientAge || ''}
+                    onChange={e => setEditingPatient({...editingPatient, patientAge: Number(e.target.value)})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Ruang Rawat / Unit</label>
+                  <input 
+                    type="text"
+                    value={editingPatient.wardName}
+                    onChange={e => setEditingPatient({...editingPatient, wardName: e.target.value})}
+                    placeholder="misal: Mawar"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">No. Kamar</label>
+                  <input 
+                    type="text"
+                    value={editingPatient.roomNumber}
+                    onChange={e => setEditingPatient({...editingPatient, roomNumber: e.target.value})}
+                    placeholder="misal: 102A"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase">Jenis Diet</label>
+                <input 
+                  type="text"
+                  value={editingPatient.dietType}
+                  onChange={e => setEditingPatient({...editingPatient, dietType: e.target.value})}
+                  placeholder="misal: Makanan Biasa"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingPatient(null)}
+                  className="px-5 py-3 bg-slate-100 hover:bg-slate-200 transition rounded-xl font-bold text-slate-600 text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPatient}
+                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 transition rounded-xl font-bold text-white text-xs flex items-center gap-1.5 shadow"
+                >
+                  <Save size={14} />
+                  <span>{savingPatient ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+                </button>
+              </div>
+            </form>
+          </motion.div>
         </div>
-      </div>      {/* Modern, gorgeous patient details description modal dialog overlay */}
+      )}      {/* Modern, gorgeous patient details description modal dialog overlay */}
       {selectedTx && (() => {
         const pTxs = transactions.filter(t => t.patientName.toLowerCase() === selectedTx.patientName.toLowerCase());
         const patientWasteByFoodType = foodTypes.map(fType => {

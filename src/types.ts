@@ -30,17 +30,18 @@ export type MealTime = 'sarapan' | 'selingan_1' | 'makan_siang' | 'selingan_2' |
 export interface Transaction {
   id: string;
   patientName: string;
+  medicalRecordNumber?: string; // NOMER REKAM MEDIS
   patientAge: number;
   patientGender: 'L' | 'P';
   wardId: string;
-  roomNumber?: string;
-  bedNumber?: string;
-  staffInCharge?: string; // New field as requested
-  dietType?: string;      // New field as requested
+  wardName?: string; // Ruang Rawat / Unit manual entry or lookup
+  roomNumber?: string; // Ruang Rawat detail
+  staffInCharge?: string;
+  dietType?: string;
   mealTime: MealTime;
   foodType?: string;
   menuId: string;
-  comstockScale: number; // 0-6
+  comstockScale: number; // 0-5
   wasteWeight: number;
   consumptionWeight: number;
   reason?: string;
@@ -50,8 +51,8 @@ export interface Transaction {
 }
 
 export const COMSTOCK_VALUES = [
-  { scale: 0, percentage: 0, label: '0% (Habis)' },
-  { scale: 1, percentage: 25, label: '25% (Sisa 1/4)' },
+  { scale: 0, percentage: 0, label: '0% (Habis Total)' },
+  { scale: 1, percentage: 20, label: '20% (Sisa 1/5)' },
   { scale: 2, percentage: 50, label: '50% (Sisa 1/2)' },
   { scale: 3, percentage: 75, label: '75% (Sisa 3/4)' },
   { scale: 4, percentage: 95, label: '95% (Hampir Utuh)' },

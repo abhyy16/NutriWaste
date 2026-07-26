@@ -5,7 +5,6 @@ import Register from './pages/Register';
 import CompleteProfile from './pages/CompleteProfile';
 import Dashboard from './pages/Dashboard';
 import RecordWaste from './pages/RecordWaste';
-import MasterData from './pages/MasterData';
 import MenuCycle from './pages/MenuCycle';
 import Profile from './pages/Profile';
 import Reports from './pages/Reports';
@@ -42,7 +41,6 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="record" element={<RecordWaste />} />
-          <Route path="master" element={isAdminOrNutritionist ? <MasterData /> : <Navigate to="/" />} />
           <Route path="menu-cycle" element={isAdminOrNutritionist ? <MenuCycle /> : <Navigate to="/" />} />
           <Route path="reports" element={<Reports />} />
           <Route path="system-flow" element={<SystemFlow />} />

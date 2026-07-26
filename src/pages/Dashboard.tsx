@@ -93,7 +93,6 @@ export default function Dashboard() {
 
     try {
       setError(null);
-      const menu = menus.find(m => m.id === editingTx.menuId);
       const scale = COMSTOCK_VALUES.find(v => v.scale === editingTx.comstockScale);
       
       if (!scale) return;
@@ -101,12 +100,18 @@ export default function Dashboard() {
       const weight = 400; // Standard fallback
       const wasteWeight = weight * (scale.percentage / 100);
       const consumptionWeight = weight - wasteWeight;
+      const selectedWard = wards.find(w => w.id === editingTx.wardId);
 
       const txRef = doc(db, 'transactions', editingTx.id);
       await updateDoc(txRef, {
+        medicalRecordNumber: editingTx.medicalRecordNumber || null,
         patientName: editingTx.patientName,
-        patientGender: editingTx.patientGender,
-        wardId: editingTx.wardId,
+        patientGender: editingTx.patientGender || 'L',
+        patientAge: Number(editingTx.patientAge) || 0,
+        wardId: editingTx.wardId || 'w1',
+        wardName: editingTx.wardName || selectedWard?.name || 'Rawat Inap',
+        roomNumber: editingTx.roomNumber || null,
+        dietType: editingTx.dietType || 'Biasa',
         menuId: editingTx.menuId,
         foodType: editingTx.foodType || 'Makanan Pokok',
         comstockScale: editingTx.comstockScale,
@@ -603,6 +608,16 @@ export default function Dashboard() {
                 <form onSubmit={handleUpdate} className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase">No. Rekam Medis</label>
+                        <input 
+                          type="text"
+                          value={editingTx.medicalRecordNumber || ''}
+                          onChange={e => setEditingTx({...editingTx, medicalRecordNumber: e.target.value})}
+                          placeholder="RM-XXXXXX"
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 outline-none font-bold text-slate-700"
+                        />
+                      </div>
+                      <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-400 uppercase">Nama Pasien</label>
                         <input 
                           type="text"
@@ -612,8 +627,20 @@ export default function Dashboard() {
                           required
                         />
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-400 uppercase">JK</label>
+                        <label className="text-xs font-bold text-slate-400 uppercase">Umur (Tahun)</label>
+                        <input 
+                          type="number"
+                          value={editingTx.patientAge || ''}
+                          onChange={e => setEditingTx({...editingTx, patientAge: Number(e.target.value)})}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 outline-none font-bold text-slate-700"
+                        />
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase">Jenis Kelamin</label>
                         <div className="flex bg-slate-100 p-1 rounded-xl h-[46px]">
                           {(['L', 'P'] as const).map(g => (
                             <button
@@ -622,24 +649,46 @@ export default function Dashboard() {
                               onClick={() => setEditingTx({...editingTx, patientGender: g})}
                               className={`flex-1 flex items-center justify-center text-[10px] font-black rounded-lg transition-all ${editingTx.patientGender === g ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
                             >
-                              {g === 'L' ? 'LAKI' : 'PEREMPUAN'}
+                              {g === 'L' ? 'LAKI-LAKI' : 'PEREMPUAN'}
                             </button>
                           ))}
                         </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2 col-span-2">
-                         <label className="text-xs font-bold text-slate-400 uppercase">Unit/Ward</label>
-                         <select 
-                           value={editingTx.wardId}
-                           onChange={e => setEditingTx({...editingTx, wardId: e.target.value})}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                         <label className="text-xs font-bold text-slate-400 uppercase">Ruang Rawat / Unit</label>
+                         <input 
+                           type="text"
+                           value={editingTx.wardName || wards.find(w => w.id === editingTx.wardId)?.name || ''}
+                           onChange={e => setEditingTx({...editingTx, wardName: e.target.value})}
+                           placeholder="misal: Mawar / Melati"
                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 outline-none font-bold text-slate-700"
                            required
-                         >
-                           {wards.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                         </select>
+                         />
                       </div>
+                      <div className="space-y-2">
+                         <label className="text-xs font-bold text-slate-400 uppercase">No. Kamar / Bed</label>
+                         <input 
+                           type="text"
+                           value={editingTx.roomNumber || ''}
+                           onChange={e => setEditingTx({...editingTx, roomNumber: e.target.value})}
+                           placeholder="misal: 102A"
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 outline-none font-bold text-slate-700"
+                         />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                       <label className="text-xs font-bold text-slate-400 uppercase">Jenis Diet</label>
+                       <input 
+                         type="text"
+                         value={editingTx.dietType || 'Biasa'}
+                         onChange={e => setEditingTx({...editingTx, dietType: e.target.value})}
+                         placeholder="misal: Makanan Biasa / Diet Rendah Garam"
+                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 outline-none font-bold text-slate-700"
+                       />
                     </div>
 
                   <div className="space-y-2">

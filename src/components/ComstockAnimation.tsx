@@ -7,7 +7,7 @@ interface ComstockAnimationProps {
 
 export default function ComstockAnimation({ scale, isActive }: ComstockAnimationProps) {
   // scale 0: 0% waste (Empty plate) -> Habis total
-  // scale 1: 25% waste (1/4 remaining)
+  // scale 1: 20% waste (1/5 remaining)
   // scale 2: 50% waste (1/2 remaining)
   // scale 3: 75% waste (3/4 remaining)
   // scale 4: 95% waste (Small amount missing)
@@ -16,7 +16,7 @@ export default function ComstockAnimation({ scale, isActive }: ComstockAnimation
   const getWastePercentage = (s: number) => {
     switch (s) {
       case 0: return 0;
-      case 1: return 25;
+      case 1: return 20;
       case 2: return 50;
       case 3: return 75;
       case 4: return 95;
