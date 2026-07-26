@@ -22,60 +22,44 @@ import { motion, AnimatePresence } from 'motion/react';
 
 const MEAL_TIMES = [
   { id: 'sarapan', label: 'Sarapan' },
-  { id: 'selingan_1', label: 'Selingan Pagi' },
   { id: 'makan_siang', label: 'Makan Siang' },
-  { id: 'selingan_2', label: 'Selingan Sore' },
   { id: 'makan_malam', label: 'Makan Malam' }
 ];
 
 const DEFAULT_CYCLE_DATA: Record<number, Record<string, string>> = {
   1: {
     sarapan: 'Nasi, Hati ayam, tempe, susu',
-    selingan_1: 'Tepung terigu, telur ayam, pisang',
     makan_siang: 'Nasi, daging sapi, kangkung, alpukat, susu',
-    selingan_2: 'Tepung terigu, telur ayam, margarin',
     makan_malam: 'Nasi goreng, hati ayam, telur ayam, pisang ambon'
   },
   2: {
     sarapan: 'Nasi, ikan nila, tahu, apel',
-    selingan_1: 'Apel, mangga, jeruk, melon, susu kental manis, yogurt, mayonise',
     makan_siang: 'Nasi, ikan teri, bayam, wortel, pisang ambon',
-    selingan_2: 'Margarin, tepung terigu, tepung maizena, telur ayam, pisang',
     makan_malam: 'Nasi, telur ayam, tempe, mangga'
   },
   3: {
     sarapan: 'Nasi, tempe, ayam, apel',
-    selingan_1: 'Agar-agar, biskuit, susu skim',
     makan_siang: 'Nasi, ayam, sawi hijau, wortel, kembang kol',
-    selingan_2: 'Tepung terigu, gula merah, kelapa parut',
     makan_malam: 'Nasi, bandeng, tahu, tauge, semangka'
   },
   4: {
     sarapan: 'Nasi goreng, ayam, mangga',
-    selingan_1: 'Tepung terigu, tepung beras, telur ayam, kelapa parut, santan',
     makan_siang: 'Nasi, nila, tempe, kacang panjang',
-    selingan_2: 'Telur ayam, tepung terigu, tepung maizena, margarin',
     makan_malam: 'Nasi, daging sapi, tahu, selada'
   },
   5: {
     sarapan: 'Nasi, ayam, hati ayam, kol, pepaya',
-    selingan_1: 'Agar-agar, coklat, susu kental manis',
     makan_siang: 'Nasi, udang, sawi, pisang ambon',
-    selingan_2: 'Tepung terigu, telur ayam, bubuk coklat, coklat batang, margarin, susu kental manis',
     makan_malam: 'Nasi, hati ayam, kentang, wortel, kol, apel'
   },
   6: {
     sarapan: 'Nasi, otak-otak ikan, bayam, sawi, wortel, pisang ambon',
-    selingan_1: 'Susu skim, pisang',
     makan_siang: 'Nasi, udang, daun singkong, timun, apel',
-    selingan_2: 'Kacang ijo, santan, susu skim',
     makan_malam: 'Nasi, ayam, terong, kacang panjang, santan'
   },
   7: {
     sarapan: 'Nasi, udang, selada, apel',
-    selingan_1: 'Roti tawar, tepung maizena, keju, susu cair, santan',
     makan_siang: 'Nasi, telur, hati ayam, pisang ambon',
-    selingan_2: 'Tepung terigu, kentang, telur ayam',
     makan_malam: 'Nasi goreng, sosis, ayam, udang, telur ayam, pepaya'
   }
 };

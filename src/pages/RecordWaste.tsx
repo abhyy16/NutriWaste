@@ -44,7 +44,7 @@ export default function RecordWaste() {
     'Lauk Hewani': { menuName: '', comstockScale: null, standardWeight: '50' },
     'Lauk Nabati': { menuName: '', comstockScale: null, standardWeight: '50' },
     'Sayuran': { menuName: '', comstockScale: null, standardWeight: '100' },
-    'Buah / Selingan': { menuName: '', comstockScale: null, standardWeight: '50' },
+    'Buah': { menuName: '', comstockScale: null, standardWeight: '50' },
   });
 
   // Helper parsing comma-separated menu cycle items into categories
@@ -55,7 +55,7 @@ export default function RecordWaste() {
       'Lauk Hewani': '',
       'Lauk Nabati': '',
       'Sayuran': '',
-      'Buah / Selingan': ''
+      'Buah': ''
     };
 
     parts.forEach(part => {
@@ -73,7 +73,7 @@ export default function RecordWaste() {
       } else if (lower.includes('bayam') || lower.includes('sayur') || lower.includes('sop') || lower.includes('kol') || lower.includes('kangkung') || lower.includes('wortel') || lower.includes('sawi') || lower.includes('selada') || lower.includes('tumis') || lower.includes('timun') || lower.includes('terong') || lower.includes('kembang kol') || lower.includes('bung')) {
         result['Sayuran'] = result['Sayuran'] ? `${result['Sayuran']}, ${part}` : part;
       } else {
-        result['Buah / Selingan'] = result['Buah / Selingan'] ? `${result['Buah / Selingan']}, ${part}` : part;
+        result['Buah'] = result['Buah'] ? `${result['Buah']}, ${part}` : part;
       }
     });
 
@@ -159,7 +159,7 @@ export default function RecordWaste() {
         'Lauk Hewani': { menuName: parsed['Lauk Hewani'] || '', comstockScale: null, standardWeight: '50' },
         'Lauk Nabati': { menuName: parsed['Lauk Nabati'] || '', comstockScale: null, standardWeight: '50' },
         'Sayuran': { menuName: parsed['Sayuran'] || '', comstockScale: null, standardWeight: '100' },
-        'Buah / Selingan': { menuName: parsed['Buah / Selingan'] || '', comstockScale: null, standardWeight: '50' },
+        'Buah': { menuName: parsed['Buah'] || '', comstockScale: null, standardWeight: '50' },
       });
     } else {
       setFoodRecords({
@@ -167,7 +167,7 @@ export default function RecordWaste() {
         'Lauk Hewani': { menuName: '', comstockScale: null, standardWeight: '50' },
         'Lauk Nabati': { menuName: '', comstockScale: null, standardWeight: '50' },
         'Sayuran': { menuName: '', comstockScale: null, standardWeight: '100' },
-        'Buah / Selingan': { menuName: '', comstockScale: null, standardWeight: '50' },
+        'Buah': { menuName: '', comstockScale: null, standardWeight: '50' },
       });
     }
   }, [foodItems, cycleDay, mealTime, menus]);
@@ -284,7 +284,7 @@ export default function RecordWaste() {
       'Lauk Hewani': { menuName: '', comstockScale: null, standardWeight: '50' },
       'Lauk Nabati': { menuName: '', comstockScale: null, standardWeight: '50' },
       'Sayuran': { menuName: '', comstockScale: null, standardWeight: '100' },
-      'Buah / Selingan': { menuName: '', comstockScale: null, standardWeight: '50' },
+      'Buah': { menuName: '', comstockScale: null, standardWeight: '50' },
     });
     setStep(1);
   };

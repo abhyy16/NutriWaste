@@ -25,7 +25,7 @@ export interface Ward {
   name: string;
 }
 
-export type MealTime = 'sarapan' | 'selingan_1' | 'makan_siang' | 'selingan_2' | 'makan_malam'; 
+export type MealTime = 'sarapan' | 'makan_siang' | 'makan_malam'; 
 
 export interface Transaction {
   id: string;

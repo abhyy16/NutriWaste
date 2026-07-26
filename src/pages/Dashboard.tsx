@@ -155,7 +155,7 @@ export default function Dashboard() {
   }).reverse();
 
   // Chart Data: Waste by Meal Time
-  const mealTimes = ['sarapan', 'selingan_1', 'makan_siang', 'selingan_2', 'makan_malam'];
+  const mealTimes = ['sarapan', 'makan_siang', 'makan_malam'];
   const mealTimeData = mealTimes.map(m => {
     const mtTransactions = displayedTransactions.filter(t => t.mealTime === m);
     const totalWaste = mtTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
@@ -173,7 +173,7 @@ export default function Dashboard() {
     'Lauk Hewani',
     'Lauk Nabati',
     'Sayuran',
-    'Buah / Selingan'
+    'Buah'
   ];
 
   const foodTypeData = foodTypesList.map(fType => {
@@ -534,7 +534,6 @@ export default function Dashboard() {
                       <p className="text-xs text-slate-400">
                         {ward?.name} 
                         {t.roomNumber && ` • Kamar ${t.roomNumber}`}
-                        {t.bedNumber && ` • Bed ${t.bedNumber}`}
                       </p>
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-1 truncate">
                         Menu: <span className="text-slate-400 italic">{menu?.foodItems || 'Siklus'}</span>
@@ -721,7 +720,7 @@ export default function Dashboard() {
                         'Lauk Hewani',
                         'Lauk Nabati',
                         'Sayuran',
-                        'Buah / Selingan'
+                        'Buah'
                       ].map(fType => (
                         <option key={fType} value={fType}>{fType}</option>
                       ))}

@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Transaction, Menu, Ward } from '../types';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search, X, Info, FileText, Activity, ShieldCheck, ChevronDown, ChevronUp, Pencil, Edit3, Save, CheckCircle2 } from 'lucide-react';
+import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search, X, Info, FileText, Activity, ShieldCheck, ChevronDown, ChevronUp, Pencil, Edit3, Save, CheckCircle2, Trash2, AlertTriangle, Eye, FileSpreadsheet, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
 
 interface BarChartItem {
@@ -126,6 +126,70 @@ export default function Reports() {
   } | null>(null);
   const [savingPatient, setSavingPatient] = useState(false);
 
+  // Preview Modals State
+  const [previewPdfModal, setPreviewPdfModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    blobUrl: string;
+    filename: string;
+    doc: jsPDF | null;
+  }>({
+    isOpen: false,
+    title: '',
+    blobUrl: '',
+    filename: '',
+    doc: null
+  });
+
+  const [previewExcelModal, setPreviewExcelModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    filename: string;
+    headers: string[];
+    rows: (string | number)[][];
+    sheetName: string;
+    wb: XLSX.WorkBook | null;
+  }>({
+    isOpen: false,
+    title: '',
+    filename: '',
+    headers: [],
+    rows: [],
+    sheetName: '',
+    wb: null
+  });
+
+  const openPdfPreview = (doc: jsPDF, filename: string, title: string) => {
+    const blob = doc.output('blob');
+    const blobUrl = URL.createObjectURL(blob);
+    setPreviewPdfModal({
+      isOpen: true,
+      title,
+      blobUrl,
+      filename,
+      doc
+    });
+  };
+
+  const openExcelPreview = (data: Record<string, any>[], filename: string, sheetName: string, title: string) => {
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+    const headers = data.length > 0 ? Object.keys(data[0]) : [];
+    const rows = data.map(item => headers.map(h => item[h]));
+
+    setPreviewExcelModal({
+      isOpen: true,
+      title,
+      filename,
+      headers,
+      rows,
+      sheetName,
+      wb
+    });
+  };
+
   const exportPatientToExcel = (patientName: string) => {
     const pTxs = transactions.filter(t => t.patientName.toLowerCase() === patientName.toLowerCase());
     const data = pTxs.map(t => {
@@ -141,7 +205,7 @@ export default function Reports() {
         'JK': t.patientGender || '-',
         'Umur': t.patientAge,
         'Unit/Bangsal': ward?.name || 'Unknown',
-        'Kamar/Bed': `${t.roomNumber || '-'}/${t.bedNumber || '-'}`,
+        'No. Kamar': t.roomNumber || '-',
         'PJ Ruangan': t.staffInCharge || '-',
         'Jenis Diet': t.dietType || 'Biasa',
         'Menu': menu?.foodItems || 'Menu Siklus',
@@ -155,10 +219,8 @@ export default function Reports() {
       };
     });
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Riwayat Sisa Makan');
-    XLSX.writeFile(wb, `Sisa_Makan_${patientName.replace(/\s+/g, '_')}_${selectedMonth}.xlsx`);
+    const filename = `Sisa_Makan_${patientName.replace(/\s+/g, '_')}_${selectedMonth}.xlsx`;
+    openExcelPreview(data, filename, 'Riwayat Sisa Makan', `Riwayat Sisa Makan Pasien: ${patientName}`);
   };
 
   const exportPatientToPDF = (patientName: string) => {
@@ -178,7 +240,7 @@ export default function Reports() {
       return [
         format(t.timestamp || new Date(), 'dd/MM/yy HH:mm'),
         ward?.name || '-',
-        `${t.roomNumber || '-'}/${t.bedNumber || '-'}`,
+        t.roomNumber || '-',
         (t.mealTime || '').replace('_', ' ').toUpperCase(),
         t.foodType || 'Makanan Pokok',
         `${t.wasteWeight}g / ${stdW}g`,
@@ -196,7 +258,8 @@ export default function Reports() {
       styles: { fontSize: 9 }
     });
 
-    doc.save(`Riwayat_Sisa_Makan_${patientName.replace(/\s+/g, '_')}_${selectedMonth}.pdf`);
+    const filename = `Riwayat_Sisa_Makan_${patientName.replace(/\s+/g, '_')}_${selectedMonth}.pdf`;
+    openPdfPreview(doc, filename, `Riwayat Sisa Makan Pasien: ${patientName}`);
   };
 
   useEffect(() => {
@@ -356,7 +419,7 @@ export default function Reports() {
           ...t,
           medicalRecordNumber: editingPatient.medicalRecordNumber,
           patientName: editingPatient.patientName,
-          patientGender: editingPatient.patientGender,
+          patientGender: (editingPatient.patientGender as 'L' | 'P') || 'L',
           patientAge: Number(editingPatient.patientAge),
           wardName: editingPatient.wardName,
           roomNumber: editingPatient.roomNumber,
@@ -372,6 +435,72 @@ export default function Reports() {
     }
   };
 
+  const handleDeletePatient = async (patientKey: string, patientName: string) => {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus SELURUH catatan transaksi sisa makanan untuk pasien "${patientName}"?`)) return;
+    try {
+      setLoading(true);
+      const matchingTxs = transactions.filter(t => 
+        (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() === patientKey ||
+        t.patientName.toLowerCase() === patientName.toLowerCase()
+      );
+
+      const promises = matchingTxs.map(t => deleteDoc(doc(db, 'transactions', t.id)));
+      await Promise.all(promises);
+
+      setTransactions(prev => prev.filter(t => 
+        (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() !== patientKey &&
+        t.patientName.toLowerCase() !== patientName.toLowerCase()
+      ));
+    } catch (err) {
+      console.error("Gagal menghapus data pasien:", err);
+      alert("Gagal menghapus data pasien");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSingleTx = async (txId: string) => {
+    if (!window.confirm("Apakah Anda yakin ingin menghapus catatan sisa makanan ini?")) return;
+    try {
+      await deleteDoc(doc(db, 'transactions', txId));
+      setTransactions(prev => prev.filter(t => t.id !== txId));
+    } catch (err) {
+      console.error("Gagal menghapus transaksi:", err);
+      alert("Gagal menghapus transaksi");
+    }
+  };
+
+  const handleClearAllTransactions = async () => {
+    if (!window.confirm("PERINGATAN KRITIS: Apakah Anda yakin ingin MENGHAPUS SELURUH DATA TRANSAKSI SISA MAKANAN di database? Angka laporan akan kembali menjadi 0 secara penuh.")) return;
+    try {
+      setLoading(true);
+      const snap = await getDocs(collection(db, 'transactions'));
+      const promises = snap.docs.map(d => deleteDoc(doc(db, 'transactions', d.id)));
+      await Promise.all(promises);
+      setTransactions([]);
+      alert("Seluruh data transaksi berhasil dihapus. Database sekarang bernilai 0.");
+    } catch (err) {
+      console.error("Gagal menghapus semua data:", err);
+      alert("Gagal menghapus semua data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatIndonesianMonth = (monthStr: string) => {
+    if (!monthStr) return '-';
+    const parts = monthStr.split('-');
+    if (parts.length < 2) return monthStr;
+    const year = parts[0];
+    const month = parts[1];
+    const monthNames = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    const idx = parseInt(month, 10) - 1;
+    return `${monthNames[idx] || month} ${year}`;
+  };
+
   const exportPatientRecapToExcel = () => {
     const data = patientRecaps.map(pr => ({
       'No. Rekam Medis': pr.medicalRecordNumber,
@@ -381,16 +510,102 @@ export default function Reports() {
       'Ruang Rawat / Unit': pr.wardName,
       'No. Kamar': pr.roomNumber,
       'Jenis Diet': pr.dietType,
-      'Jumlah Asesmen (Makan Siang)': pr.totalAssessments,
+      'Jumlah Asesmen': pr.totalAssessments,
       'Total Sisa (gram)': pr.totalWasteWeight,
       'Persentase Sisa Makanan (%)': pr.wastePercentage.toFixed(1) + '%',
       'Status Efisiensi': pr.wastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
     }));
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Rekapitulasi Pasien');
-    XLSX.writeFile(wb, `Rekapitulasi_Sisa_Makan_Pasien_${selectedMonth}.xlsx`);
+    const filename = `Rekapitulasi_Sisa_Makan_Pasien_${selectedMonth}.xlsx`;
+    openExcelPreview(data, filename, 'Rekapitulasi Pasien', 'Rekapitulasi Sisa Makanan Pasien');
+  };
+
+  const exportPatientRecapToPDF = () => {
+    const doc = new jsPDF('landscape');
+    const monthYearFormatted = formatIndonesianMonth(selectedMonth);
+    const printedAt = format(new Date(), 'dd/MM/yyyy HH:mm');
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('REKAPITULASI SISA MAKANAN PASIEN', 14, 15);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Bulan / Tahun : ${monthYearFormatted}`, 14, 22);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text(`Dicetak pada: ${printedAt} WITA`, 220, 22);
+
+    const efficientCount = patientRecaps.filter(p => p.wastePercentage <= 20).length;
+    const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 20).length;
+
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Total Pasien Ter-observasi: ${patientRecaps.length} Pasien | Sisa <= 20%: ${efficientCount} | Sisa > 20%: ${highWasteCount}`, 14, 28);
+
+    const recapTableData = patientRecaps.map((pr, index) => [
+      index + 1,
+      pr.medicalRecordNumber,
+      `${pr.patientName} (${pr.patientGender})`,
+      pr.wardName,
+      pr.roomNumber,
+      pr.dietType,
+      `${pr.totalAssessments}x`,
+      `${pr.wastePercentage.toFixed(1)}%`,
+      pr.wastePercentage <= 20 ? 'Ya' : 'Tidak',
+      pr.wastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
+    ]);
+
+    autoTable(doc, {
+      startY: 33,
+      head: [
+        [
+          'No.',
+          'No. RM',
+          'Nama Pasien',
+          'Ruang Rawat',
+          'No. Kamar',
+          'Jenis Diet',
+          'Jml Asesmen',
+          'Rata-rata Sisa (%)',
+          'Sisa <= 20%',
+          'Status Efisiensi'
+        ]
+      ],
+      body: recapTableData,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [5, 150, 105],
+        textColor: 255,
+        fontSize: 8.5,
+        fontStyle: 'bold',
+        halign: 'center',
+        valign: 'middle'
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        valign: 'middle'
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 10 },
+        1: { halign: 'center', cellWidth: 25 },
+        2: { cellWidth: 45 },
+        3: { cellWidth: 35 },
+        4: { halign: 'center', cellWidth: 20 },
+        5: { cellWidth: 25 },
+        6: { halign: 'center', cellWidth: 22 },
+        7: { halign: 'center', cellWidth: 28 },
+        8: { halign: 'center', cellWidth: 20 },
+        9: { halign: 'center', cellWidth: 35 }
+      }
+    });
+
+    const filename = `Rekapitulasi_Sisa_Makan_Pasien_${selectedMonth}.pdf`;
+    openPdfPreview(doc, filename, 'Rekapitulasi Sisa Makanan Pasien');
   };
 
   const foodTypes = [
@@ -398,7 +613,7 @@ export default function Reports() {
     'Lauk Hewani',
     'Lauk Nabati',
     'Sayuran',
-    'Buah / Selingan'
+    'Buah'
   ];
 
   // Helper to filter transactions for specific charts with partial filter exclusion
@@ -441,9 +656,7 @@ export default function Reports() {
 
   const mealTimesList = [
     { value: 'sarapan', label: 'Sarapan' },
-    { value: 'selingan_1', label: 'Selingan 1' },
     { value: 'makan_siang', label: 'Siang' },
-    { value: 'selingan_2', label: 'Selingan 2' },
     { value: 'makan_malam', label: 'Malam' }
   ];
 
@@ -513,7 +726,7 @@ export default function Reports() {
         'JK': t.patientGender || '-',
         'Umur': t.patientAge,
         'Unit/Bangsal': ward?.name || 'Unknown',
-        'Kamar/Bed': `${t.roomNumber || '-'}/${t.bedNumber || '-'}`,
+        'No. Kamar': t.roomNumber || '-',
         'PJ Ruangan': t.staffInCharge || '-',
         'Jenis Diet': t.dietType || 'Biasa',
         'Menu': menu?.foodItems || 'Menu Siklus',
@@ -527,49 +740,197 @@ export default function Reports() {
       };
     });
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Laporan Waste');
-    XLSX.writeFile(wb, `Laporan_Nutriwaste_${selectedMonth}.xlsx`);
+    const filename = `Laporan_Nutriwaste_${selectedMonth}.xlsx`;
+    openExcelPreview(data, filename, 'Laporan Waste', 'Laporan Observasi Sisa Makanan Pasien');
   };
 
   const exportToPDF = () => {
     const doc = new jsPDF('landscape');
-    const title = `Laporan Nutriwaste - ${selectedMonth}`;
-    
-    doc.setFontSize(18);
-    doc.text(title, 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Dicetak pada: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 30);
+    const monthYearFormatted = formatIndonesianMonth(selectedMonth);
+    const printedAt = format(new Date(), 'dd/MM/yyyy HH:mm');
 
-    const tableData = filteredTransactions.map(t => {
+    // Title Header
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('LAPORAN OBSERVASI SISA MAKANAN PASIEN', 14, 15);
+
+    // Subheader Bulan / Tahun (Sesuai format formulir resmi)
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Bulan / Tahun : ${monthYearFormatted}`, 14, 22);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text(`Dicetak pada: ${printedAt} WITA`, 220, 22);
+
+    // Tabel 1: Log Observasi Data Sisa Makanan (11 Kolom sesuai gambar)
+    const tableData = filteredTransactions.map((t, index) => {
       const ward = wards.find(w => w.id === t.wardId);
-      const stdWeight = t.wasteWeight + t.consumptionWeight;
-      const wastePercent = stdWeight > 0 ? ((t.wasteWeight / stdWeight) * 100).toFixed(0) : '0';
+      
+      let wastePercentNum = 0;
+      if (t.comstockScale !== undefined && t.comstockScale !== null) {
+        wastePercentNum = (t.comstockScale / 5) * 100;
+      } else {
+        const stdWeight = (t.wasteWeight + t.consumptionWeight) || 400;
+        wastePercentNum = stdWeight > 0 ? (t.wasteWeight / stdWeight) * 100 : 0;
+      }
+
+      const isLE20 = wastePercentNum <= 20;
+      const methodStr = (t.comstockScale !== undefined && t.comstockScale !== null) ? 'Comstock' : 'Timbang';
 
       return [
-        format(t.timestamp || new Date(), 'dd/MM/yy'),
+        index + 1,
+        format(t.timestamp || new Date(), 'dd/MM/yyyy'),
         `${t.patientName} (${t.patientGender || '-'})`,
-        ward?.name || '-',
-        `${t.roomNumber || '-'}/${t.bedNumber || '-'}`,
-        (t.mealTime || '').replace('_', ' ').toUpperCase(),
-        t.foodType || 'Makanan Pokok',
-        `${wastePercent}%`,
-        t.reason || '-'
+        t.medicalRecordNumber || '-',
+        t.wardName || ward?.name || 'Rawat Inap',
+        t.dietType || 'Biasa',
+        methodStr,
+        `${wastePercentNum.toFixed(1)}%`,
+        isLE20 ? 'v' : '',
+        !isLE20 ? 'v' : '',
+        t.reason || '-',
+        t.staffName || t.staffInCharge || 'Ahli Gizi'
       ];
     });
 
     autoTable(doc, {
-      startY: 35,
-      head: [['Tanggal', 'Pasien', 'Unit', 'Kmr/Bed', 'Wkt', 'Jenis', 'Waste %', 'Alasan']],
+      startY: 26,
+      head: [
+        [
+          { content: 'No.', rowSpan: 2 },
+          { content: 'Tanggal Observasi', rowSpan: 2 },
+          { content: 'Nama Pasien', rowSpan: 2 },
+          { content: 'No. RM', rowSpan: 2 },
+          { content: 'Ruang Rawat', rowSpan: 2 },
+          { content: 'Jenis Diet', rowSpan: 2 },
+          { content: 'Metode Pengukuran\n(Comstock/Timbang)', rowSpan: 2 },
+          { content: 'Estimasi Sisa\nMakanan (%)', rowSpan: 2 },
+          { content: 'Sisa <= 20%', colSpan: 2, styles: { halign: 'center' } },
+          { content: 'Alasan Tidak Habis', rowSpan: 2 },
+          { content: 'Nama Ahli Gizi', rowSpan: 2 }
+        ],
+        [
+          { content: 'Ya', styles: { halign: 'center' } },
+          { content: 'Tidak', styles: { halign: 'center' } }
+        ]
+      ],
       body: tableData,
-      theme: 'striped',
-      headStyles: { fillColor: [5, 150, 105] }, // emerald-600
-      styles: { fontSize: 9 }
+      theme: 'grid',
+      headStyles: {
+        fillColor: [30, 41, 59], // Slate 800
+        textColor: 255,
+        fontSize: 7.5,
+        fontStyle: 'bold',
+        halign: 'center',
+        valign: 'middle',
+        lineWidth: 0.1,
+        lineColor: [200, 200, 200]
+      },
+      styles: {
+        fontSize: 7,
+        cellPadding: 2,
+        valign: 'middle',
+        overflow: 'linebreak',
+        lineWidth: 0.1,
+        lineColor: [220, 220, 220]
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 10 },
+        1: { halign: 'center', cellWidth: 22 },
+        2: { cellWidth: 32 },
+        3: { halign: 'center', cellWidth: 20 },
+        4: { cellWidth: 24 },
+        5: { cellWidth: 20 },
+        6: { halign: 'center', cellWidth: 28 },
+        7: { halign: 'center', cellWidth: 22 },
+        8: { halign: 'center', cellWidth: 12 },
+        9: { halign: 'center', cellWidth: 12 },
+        10: { cellWidth: 35 },
+        11: { cellWidth: 25 }
+      }
     });
 
-    doc.save(`Laporan_Nutriwaste_${selectedMonth}.pdf`);
+    // Positions for Rekapitulasi Section at the end of PDF
+    const finalY = (doc as any).lastAutoTable?.finalY || 150;
+    let recapStartY = finalY + 14;
+
+    if (recapStartY > 155) {
+      doc.addPage();
+      recapStartY = 20;
+    }
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text(`REKAPITULASI SISA MAKANAN PASIEN (${monthYearFormatted.toUpperCase()})`, 14, recapStartY);
+
+    const efficientCount = patientRecaps.filter(p => p.wastePercentage <= 20).length;
+    const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 20).length;
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Total Pasien: ${patientRecaps.length} Pasien  |  Efisien (Sisa <= 20%): ${efficientCount} Pasien  |  Sisa Tinggi (> 20%): ${highWasteCount} Pasien`, 14, recapStartY + 6);
+
+    const recapTableData = patientRecaps.map((pr, index) => [
+      index + 1,
+      pr.medicalRecordNumber,
+      `${pr.patientName} (${pr.patientGender})`,
+      pr.wardName,
+      pr.dietType,
+      `${pr.totalAssessments}x`,
+      `${pr.wastePercentage.toFixed(1)}%`,
+      pr.wastePercentage <= 20 ? 'Ya' : 'Tidak',
+      pr.wastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
+    ]);
+
+    autoTable(doc, {
+      startY: recapStartY + 10,
+      head: [
+        [
+          'No.',
+          'No. RM',
+          'Nama Pasien',
+          'Ruang Rawat',
+          'Jenis Diet',
+          'Jml Asesmen',
+          'Rata-rata Sisa (%)',
+          'Sisa <= 20%',
+          'Status Efisiensi'
+        ]
+      ],
+      body: recapTableData,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [5, 150, 105], // emerald-600
+        textColor: 255,
+        fontSize: 8,
+        fontStyle: 'bold',
+        halign: 'center',
+        valign: 'middle'
+      },
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 2.5,
+        valign: 'middle'
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 10 },
+        1: { halign: 'center', cellWidth: 25 },
+        2: { cellWidth: 45 },
+        3: { cellWidth: 35 },
+        4: { cellWidth: 25 },
+        5: { halign: 'center', cellWidth: 22 },
+        6: { halign: 'center', cellWidth: 30 },
+        7: { halign: 'center', cellWidth: 20 },
+        8: { halign: 'center', cellWidth: 40 }
+      }
+    });
+
+    const filename = `Laporan_Observasi_Sisa_Makan_${selectedMonth}.pdf`;
+    openPdfPreview(doc, filename, 'Laporan Observasi Sisa Makanan Pasien');
   };
 
   return (
@@ -577,7 +938,7 @@ export default function Reports() {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-display font-black text-slate-850 tracking-tight">Laporan Bulanan</h2>
-          <p className="text-slate-500 text-sm font-semibold">Ekspor data sisa makanan ke format Excel</p>
+          <p className="text-slate-500 text-sm font-semibold">Pratinjau & ekspor data sisa makanan ke format Excel & PDF</p>
         </div>
         <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200">
            <div className="flex items-center gap-2 px-3 text-slate-400">
@@ -608,18 +969,20 @@ export default function Reports() {
            <button 
              onClick={exportToExcel}
              disabled={filteredTransactions.length === 0}
-             className="flex items-center justify-center gap-2 px-4 py-4 bg-white border border-emerald-200 text-emerald-700 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-md disabled:opacity-50 disabled:shadow-none text-xs sm:text-base"
+             className="flex items-center justify-center gap-2 px-4 py-4 bg-white border border-emerald-200 text-emerald-800 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-md disabled:opacity-50 disabled:shadow-none text-xs sm:text-sm cursor-pointer"
+             title="Pratinjau data spreadsheet Excel sebelum diunduh"
            >
-             <FileDown size={18} />
-             <span>Excel</span>
+             <FileSpreadsheet size={18} className="text-emerald-600" />
+             <span>Pratinjau & Unduh Excel</span>
            </button>
            <button 
              onClick={exportToPDF}
              disabled={filteredTransactions.length === 0}
-             className="flex items-center justify-center gap-2 px-4 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-950/20 disabled:opacity-50 disabled:shadow-none text-xs sm:text-base"
+             className="flex items-center justify-center gap-2 px-4 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-950/20 disabled:opacity-50 disabled:shadow-none text-xs sm:text-sm cursor-pointer"
+             title="Pratinjau dokumen PDF sebelum diunduh"
            >
-             <FileDown size={18} />
-             <span>PDF</span>
+             <FileText size={18} />
+             <span>Pratinjau & Unduh PDF</span>
            </button>
         </div>
       </div>
@@ -631,14 +994,25 @@ export default function Reports() {
             <Search size={18} className="text-emerald-600" />
             <h3 className="font-display font-black text-slate-800 text-sm tracking-tight">Pencarian & Filter Laporan</h3>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center justify-center gap-1.5 px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-xs font-bold text-slate-600 transition cursor-pointer focus:outline-none"
-          >
-            <span>{showFilters ? 'Sembunyikan Saringan' : 'Tampilkan Saringan'}</span>
-            <ChevronDown size={14} className={`transform transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleClearAllTransactions}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 border border-rose-200 text-rose-600 bg-rose-50/50 rounded-xl hover:bg-rose-100 text-xs font-bold transition cursor-pointer focus:outline-none"
+              title="Hapus seluruh transaksi untuk mengosongkan laporan (kembali 0)"
+            >
+              <Trash2 size={14} />
+              <span className="hidden sm:inline">Reset / Kosongkan Data</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-xs font-bold text-slate-600 transition cursor-pointer focus:outline-none"
+            >
+              <span>{showFilters ? 'Sembunyikan Saringan' : 'Tampilkan Saringan'}</span>
+              <ChevronDown size={14} className={`transform transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
         </div>
 
         {/* ALWAYS VISIBLE SEARCH BAR AT THE TOP FOR PATIENTS */}
@@ -695,9 +1069,7 @@ export default function Reports() {
               >
                 <option value="all">Semua Waktu Makan</option>
                 <option value="sarapan">Sarapan</option>
-                <option value="selingan_1">Selingan 1</option>
                 <option value="makan_siang">Siang</option>
-                <option value="selingan_2">Selingan 2</option>
                 <option value="makan_malam">Malam</option>
               </select>
             </div>
@@ -815,15 +1187,26 @@ export default function Reports() {
            </div>
 
            {viewTab === 'rekap_pasien' && (
-             <button
-               type="button"
-               onClick={exportPatientRecapToExcel}
-               disabled={patientRecaps.length === 0}
-               className="flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold hover:bg-emerald-100 transition shadow-sm cursor-pointer"
-             >
-               <FileDown size={14} />
-               <span>Unduh Rekap Pasien (Excel)</span>
-             </button>
+             <div className="flex items-center gap-2">
+               <button
+                 type="button"
+                 onClick={exportPatientRecapToExcel}
+                 disabled={patientRecaps.length === 0}
+                 className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold hover:bg-emerald-100 transition shadow-sm cursor-pointer"
+               >
+                 <FileDown size={14} />
+                 <span>Excel Rekap</span>
+               </button>
+               <button
+                 type="button"
+                 onClick={exportPatientRecapToPDF}
+                 disabled={patientRecaps.length === 0}
+                 className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition shadow-sm cursor-pointer"
+               >
+                 <FileDown size={14} />
+                 <span>PDF Rekap</span>
+               </button>
+             </div>
            )}
         </div>
         
@@ -917,6 +1300,14 @@ export default function Reports() {
                           </button>
                           <button
                             type="button"
+                            onClick={() => handleDeletePatient(pr.patientKey, pr.patientName)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-slate-200"
+                            title="Hapus Seluruh Data Pasien Ini"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setSelectedTx(pr.sampleTx)}
                             className="px-3 py-1.5 bg-emerald-600 text-white font-bold rounded-xl text-xs hover:bg-emerald-700 transition"
                           >
@@ -941,18 +1332,19 @@ export default function Reports() {
                   <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Waktu</th>
                   <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Jenis Makanan</th>
                   <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-right">Waste</th>
+                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="animate-pulse">
-                      <td colSpan={6} className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
+                      <td colSpan={7} className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
                     </tr>
                   ))
                 ) : filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">
                       Tidak ada data yang cocok dengan kriteria filter.
                     </td>
                   </tr>
@@ -1002,6 +1394,16 @@ export default function Reports() {
                               </span>
                             );
                           })()}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSingleTx(t.id)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-slate-200"
+                            title="Hapus Transaksi Ini"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -1208,11 +1610,10 @@ export default function Reports() {
                       <span className="text-sm font-black text-slate-800">{selectedTx.patientAge} Tahun</span>
                     </div>
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 block">LOKASI BANGSAL / BED</span>
+                      <span className="text-[10px] font-bold text-slate-400 block">LOKASI BANGSAL / KAMAR</span>
                       <span className="text-sm font-black text-slate-800">
                         {wards.find(w => w.id === selectedTx.wardId)?.name || 'Bangsal'} 
                         {selectedTx.roomNumber ? ` • Kamar ${selectedTx.roomNumber}` : ''}
-                        {selectedTx.bedNumber ? ` • Bed ${selectedTx.bedNumber}` : ''}
                       </span>
                     </div>
                   </div>
@@ -1431,6 +1832,187 @@ export default function Reports() {
           </div>
         );
       })()}
+
+      {/* PDF PREVIEW MODAL */}
+      <AnimatePresence>
+        {previewPdfModal.isOpen && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Modal Header */}
+              <div className="p-6 bg-slate-900 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30">
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base text-white">{previewPdfModal.title}</h3>
+                    <p className="text-xs text-slate-400">Pratinjau Dokumen Laporan Sebelum Diunduh</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setPreviewPdfModal(prev => ({ ...prev, isOpen: false }))}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body - PDF Iframe */}
+              <div className="p-4 bg-slate-100 flex-1 overflow-hidden min-h-[450px]">
+                {previewPdfModal.blobUrl ? (
+                  <iframe 
+                    src={previewPdfModal.blobUrl} 
+                    className="w-full h-full min-h-[450px] rounded-2xl border border-slate-200 shadow-inner"
+                    title="PDF Preview"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-slate-400 italic">
+                    Memuat pratinjau PDF...
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-5 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                <span className="text-xs text-slate-500 font-mono">
+                  File: <strong className="text-slate-800">{previewPdfModal.filename}</strong>
+                </span>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPdfModal(prev => ({ ...prev, isOpen: false }))}
+                    className="flex-1 sm:flex-none px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (previewPdfModal.doc) {
+                        previewPdfModal.doc.save(previewPdfModal.filename);
+                      }
+                      setPreviewPdfModal(prev => ({ ...prev, isOpen: false }));
+                    }}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-md shadow-emerald-950/20 cursor-pointer"
+                  >
+                    <Download size={16} />
+                    <span>Unduh File PDF</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* EXCEL PREVIEW MODAL */}
+      <AnimatePresence>
+        {previewExcelModal.isOpen && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-6xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Modal Header */}
+              <div className="p-6 bg-emerald-900 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-700/50 text-emerald-300 rounded-xl border border-emerald-600/50">
+                    <FileSpreadsheet size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base text-white">{previewExcelModal.title}</h3>
+                    <p className="text-xs text-emerald-200">Pratinjau Data Spreadsheet Excel ({previewExcelModal.rows.length} Baris Data)</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setPreviewExcelModal(prev => ({ ...prev, isOpen: false }))}
+                  className="p-2 rounded-xl text-emerald-300 hover:text-white hover:bg-emerald-800 transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body - Table Preview */}
+              <div className="p-6 flex-1 overflow-auto bg-slate-50 space-y-3">
+                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm max-h-[50vh] overflow-y-auto">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead>
+                      <tr className="bg-emerald-800 text-white sticky top-0 z-10">
+                        {previewExcelModal.headers.map((h, i) => (
+                          <th key={i} className="px-4 py-3 font-bold border-b border-emerald-900/40">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {previewExcelModal.rows.slice(0, 100).map((row, rowIndex) => (
+                        <tr key={rowIndex} className="hover:bg-emerald-50/50 transition">
+                          {row.map((cell, cellIndex) => (
+                            <td key={cellIndex} className="px-4 py-2.5 text-slate-700 font-medium border-r border-slate-100 last:border-r-0">
+                              {cell !== undefined && cell !== null ? String(cell) : '-'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                      {previewExcelModal.rows.length === 0 && (
+                        <tr>
+                          <td colSpan={previewExcelModal.headers.length || 1} className="p-8 text-center text-slate-400 italic">
+                            Tidak ada data untuk ditayangkan.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {previewExcelModal.rows.length > 100 && (
+                  <p className="text-[11px] text-slate-500 italic text-right">
+                    * Menampilkan 100 baris pertama dari total {previewExcelModal.rows.length} baris pada pratinjau.
+                  </p>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-5 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                <span className="text-xs text-slate-500 font-mono">
+                  File: <strong className="text-slate-800">{previewExcelModal.filename}</strong>
+                </span>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewExcelModal(prev => ({ ...prev, isOpen: false }))}
+                    className="flex-1 sm:flex-none px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (previewExcelModal.wb) {
+                        XLSX.writeFile(previewExcelModal.wb, previewExcelModal.filename);
+                      }
+                      setPreviewExcelModal(prev => ({ ...prev, isOpen: false }));
+                    }}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-md shadow-emerald-950/20 cursor-pointer"
+                  >
+                    <Download size={16} />
+                    <span>Unduh File Excel (.xlsx)</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
