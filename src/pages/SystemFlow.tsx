@@ -174,7 +174,7 @@ export default function SystemFlow() {
       description: 'Metode penilaian sisa makanan menggunakan estimasi visual piring sisa terstandarisasi 5 poin untuk kemudahan entri petugas.',
       icon: UtensilsCrossed,
       specs: [
-        'Skala Nilai Sisa: 0 (0%), 1 (20%), 2 (50%), 3 (75%), 4 (95%), 5 (100%).',
+        'Skala Nilai Sisa: 0 (0%), 1 (25%), 2 (50%), 3 (75%), 4 (95%), 5 (100%).',
         'Pengisian Multi-Komponen: Makanan Pokok, Lauk Hewani, Lauk Nabati, Sayuran, dan Buah.',
         'Kalkulasi persentase konsumsi riil otomatis per pasien.',
         'Tampilan warna indikator porsi sisa (Hijau = Bagus, Kuning = Sedang, Merah = Kritis).'

@@ -188,10 +188,10 @@ export default function Dashboard() {
     };
   });
 
-  // Alarms: Transactions with > 20% waste (Simplified as menus are cyclical now)
+  // Alarms: Transactions with > 25% waste (Simplified as menus are cyclical now)
   const menuAlerts = displayedTransactions.filter(t => {
      const scale = COMSTOCK_VALUES.find(v => v.scale === t.comstockScale);
-     return scale && scale.percentage > 20;
+     return scale && scale.percentage > 25;
   }).slice(0, 5);
 
   const COLORS = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#ecfdf5'];
@@ -294,9 +294,9 @@ export default function Dashboard() {
         <StatCard 
           title="Avg Waste" 
           value={`${avgWaste.toFixed(0)}%`} 
-          subText="Target: <20%" 
+          subText="Target: <25%" 
           icon={TrendingUp} 
-          trend={avgWaste > 20 ? 'bad' : 'good'}
+          trend={avgWaste > 25 ? 'bad' : 'good'}
         />
         <StatCard 
           title="Records" 
@@ -408,41 +408,11 @@ export default function Dashboard() {
                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter mb-1 truncate w-full">
                       {(mt || '').replace('_', ' ')}
                     </p>
-                    <p className={`text-sm font-black ${mtPercent > 20 ? 'text-red-500' : 'text-emerald-600'}`}>
+                    <p className={`text-sm font-black ${mtPercent > 25 ? 'text-red-500' : 'text-emerald-600'}`}>
                       {mtPercent.toFixed(0)}%
                     </p>
                   </div>
                 );
-              })}
-           </div>
-        </div>
-
-        <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
-           <h3 className="font-bold text-slate-800 text-lg mb-6 flex items-center gap-2">
-             <Building2 className="text-emerald-600" size={20} />
-             Waste Per Unit (7 Hari)
-           </h3>
-           <div className="space-y-3">
-              {wards.slice(0, 3).map(w => {
-                 const wardTxs = transactions.filter(t => t.wardId === w.id);
-                 const wasteTotal = wardTxs.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-                 const servedTotal = wardTxs.length * 400;
-                 const percent = servedTotal > 0 ? (wasteTotal / servedTotal) * 100 : 0;
-
-                 return (
-                   <div key={w.id} className="space-y-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-slate-600">{w.name}</span>
-                        <span className={percent > 20 ? 'text-red-500' : 'text-emerald-600'}>{percent.toFixed(1)}%</span>
-                      </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                         <div 
-                           className={`h-full rounded-full ${percent > 20 ? 'bg-red-500' : 'bg-emerald-500'}`}
-                           style={{ width: `${Math.min(percent, 100)}%` }}
-                         />
-                      </div>
-                   </div>
-                 );
               })}
            </div>
         </div>
@@ -458,11 +428,11 @@ export default function Dashboard() {
                    <div key={item.name} className="space-y-1">
                       <div className="flex justify-between text-xs font-bold">
                         <span className="text-slate-600">{item.name} <span className="text-[9px] text-slate-400 font-normal">({item.count} entri)</span></span>
-                        <span className={item.value > 20 ? 'text-red-500' : 'text-emerald-600'}>{item.value.toFixed(1)}%</span>
+                        <span className={item.value > 25 ? 'text-red-500' : 'text-emerald-600'}>{item.value.toFixed(1)}%</span>
                       </div>
                       <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                          <div 
-                           className={`h-full rounded-full transition-all duration-500 ${item.value > 20 ? 'bg-red-500' : 'bg-emerald-500'}`}
+                           className={`h-full rounded-full transition-all duration-500 ${item.value > 25 ? 'bg-red-500' : 'bg-emerald-500'}`}
                            style={{ width: `${Math.min(item.value, 100)}%` }}
                          />
                       </div>
@@ -478,7 +448,7 @@ export default function Dashboard() {
         <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm border-t-4 border-t-red-500">
            <div className="flex items-center gap-3 mb-6">
              <AlertTriangle className="text-red-500" />
-             <h3 className="font-bold text-slate-800 text-lg">Peringatan Waste {">"} 20%</h3>
+             <h3 className="font-bold text-slate-800 text-lg">Peringatan Waste {">"} 25%</h3>
            </div>
            
            <div className="space-y-4">

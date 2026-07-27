@@ -116,7 +116,7 @@ export default function RecordWaste() {
 
   const COMSTOCK_REFERENCE = [
     { scale: 0, desc: '0% (Habis Total)' },
-    { scale: 1, desc: '20% (Sisa 1/5)' },
+    { scale: 1, desc: '25% (Sisa 1/4)' },
     { scale: 2, desc: '50% (Sisa 1/2)' },
     { scale: 3, desc: '75% (Sisa 3/4)' },
     { scale: 4, desc: '95% (Hampir Utuh)' },
@@ -437,7 +437,7 @@ export default function RecordWaste() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Ruang Rawat / Unit (Dapat Diisi Manual)</label>
+                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Ruang Rawat / Unit</label>
                     <input
                       type="text"
                       list="ward-list"
@@ -647,7 +647,7 @@ export default function RecordWaste() {
                               <div className="flex flex-col items-center text-center">
                                 <span className="text-[11px] leading-tight font-black">{v.percentage}%</span>
                                 <span className="text-[8px] opacity-80 leading-none font-bold mt-0.5">
-                                  {v.scale === 0 ? 'Habis' : v.scale === 1 ? 'Sisa 1/5' : v.scale === 2 ? 'Sisa 1/2' : v.scale === 3 ? 'Sisa 3/4' : v.scale === 4 ? '95%' : 'Utuh'}
+                                  {v.scale === 0 ? 'Habis' : v.scale === 1 ? 'Sisa 1/4' : v.scale === 2 ? 'Sisa 1/2' : v.scale === 3 ? 'Sisa 3/4' : v.scale === 4 ? '95%' : 'Utuh'}
                                 </span>
                                 <span className="text-[7.5px] opacity-60 font-mono mt-0.5 font-bold">({v.scale})</span>
                               </div>
@@ -778,7 +778,7 @@ export default function RecordWaste() {
                         </div>
 
                         <div className="p-3.5 bg-emerald-950/60 rounded-xl border border-emerald-800/50 text-[10.5px] text-emerald-200/90 leading-relaxed font-medium">
-                          <strong>Standar Skala Comstock:</strong> 0 = 0% | 1 = 20% | 2 = 50% | 3 = 75% | 4 = 95% | 5 = 100%. Total nilai skor diperoleh dari hasil perkalian jumlah centangan dengan skala nilai di setiap baris menu.
+                          <strong>Standar Skala Comstock:</strong> 0 = 0% | 1 = 25% | 2 = 50% | 3 = 75% | 4 = 95% | 5 = 100%. Total nilai skor diperoleh dari hasil perkalian jumlah centangan dengan skala nilai di setiap baris menu.
                         </div>
                       </div>
                     ) : (

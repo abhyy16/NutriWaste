@@ -57,14 +57,14 @@ function MiniBarChartCard({ title, data, maxItem, minItem, icon: Icon }: {
                     </span>
                   )}
                 </span>
-                <span className={`font-mono font-bold ${item.percentage > 20 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                <span className={`font-mono font-bold ${item.percentage > 25 ? 'text-rose-600' : 'text-emerald-600'}`}>
                   {item.percentage.toFixed(1)}%
                 </span>
               </div>
               <div className="h-3 bg-slate-100 rounded-full overflow-hidden relative">
                 <div 
                   className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${
-                    item.percentage > 20 ? 'from-rose-500 to-amber-500' : 'from-emerald-500 to-teal-500'
+                    item.percentage > 25 ? 'from-rose-500 to-amber-500' : 'from-emerald-500 to-teal-500'
                   }`}
                   style={{ width: `${Math.min(item.percentage, 100)}%` }}
                 />
@@ -338,6 +338,21 @@ export default function Reports() {
     totalComstockMax: number;
     totalWasteWeight: number;
     totalServedWeight: number;
+    pagiScore: number;
+    pagiMax: number;
+    pagiWasteWeight: number;
+    pagiServedWeight: number;
+    pagiCount: number;
+    siangScore: number;
+    siangMax: number;
+    siangWasteWeight: number;
+    siangServedWeight: number;
+    siangCount: number;
+    malamScore: number;
+    malamMax: number;
+    malamWasteWeight: number;
+    malamServedWeight: number;
+    malamCount: number;
     sampleTx: Transaction;
   }>();
 
@@ -346,6 +361,10 @@ export default function Reports() {
     const existing = patientRecapMap.get(key);
     const stdW = (t.wasteWeight + t.consumptionWeight) || 400;
     const cScale = t.comstockScale !== undefined && t.comstockScale !== null ? t.comstockScale : 0;
+
+    const mt = (t.mealTime || '').toLowerCase();
+    const isPagi = mt.includes('pagi') || mt.includes('sarapan');
+    const isMalam = mt.includes('malam');
 
     if (!existing) {
       patientRecapMap.set(key, {
@@ -362,6 +381,21 @@ export default function Reports() {
         totalComstockMax: 5,
         totalWasteWeight: t.wasteWeight,
         totalServedWeight: stdW,
+        pagiScore: isPagi ? cScale : 0,
+        pagiMax: isPagi ? 5 : 0,
+        pagiWasteWeight: isPagi ? t.wasteWeight : 0,
+        pagiServedWeight: isPagi ? stdW : 0,
+        pagiCount: isPagi ? 1 : 0,
+        siangScore: (!isPagi && !isMalam) ? cScale : 0,
+        siangMax: (!isPagi && !isMalam) ? 5 : 0,
+        siangWasteWeight: (!isPagi && !isMalam) ? t.wasteWeight : 0,
+        siangServedWeight: (!isPagi && !isMalam) ? stdW : 0,
+        siangCount: (!isPagi && !isMalam) ? 1 : 0,
+        malamScore: isMalam ? cScale : 0,
+        malamMax: isMalam ? 5 : 0,
+        malamWasteWeight: isMalam ? t.wasteWeight : 0,
+        malamServedWeight: isMalam ? stdW : 0,
+        malamCount: isMalam ? 1 : 0,
         sampleTx: t
       });
     } else {
@@ -370,6 +404,26 @@ export default function Reports() {
       existing.totalComstockMax += 5;
       existing.totalWasteWeight += t.wasteWeight;
       existing.totalServedWeight += stdW;
+
+      if (isPagi) {
+        existing.pagiScore += cScale;
+        existing.pagiMax += 5;
+        existing.pagiWasteWeight += t.wasteWeight;
+        existing.pagiServedWeight += stdW;
+        existing.pagiCount += 1;
+      } else if (isMalam) {
+        existing.malamScore += cScale;
+        existing.malamMax += 5;
+        existing.malamWasteWeight += t.wasteWeight;
+        existing.malamServedWeight += stdW;
+        existing.malamCount += 1;
+      } else {
+        existing.siangScore += cScale;
+        existing.siangMax += 5;
+        existing.siangWasteWeight += t.wasteWeight;
+        existing.siangServedWeight += stdW;
+        existing.siangCount += 1;
+      }
     }
   });
 
@@ -378,9 +432,25 @@ export default function Reports() {
     const wastePercentage = pr.totalComstockMax > 0
       ? (pr.totalComstockScore / pr.totalComstockMax) * 100
       : (pr.totalServedWeight > 0 ? (pr.totalWasteWeight / pr.totalServedWeight) * 100 : 0);
+
+    const pagiPercent = pr.pagiCount > 0
+      ? (pr.pagiMax > 0 ? (pr.pagiScore / pr.pagiMax) * 100 : (pr.pagiServedWeight > 0 ? (pr.pagiWasteWeight / pr.pagiServedWeight) * 100 : 0))
+      : null;
+
+    const siangPercent = pr.siangCount > 0
+      ? (pr.siangMax > 0 ? (pr.siangScore / pr.siangMax) * 100 : (pr.siangServedWeight > 0 ? (pr.siangWasteWeight / pr.siangServedWeight) * 100 : 0))
+      : null;
+
+    const malamPercent = pr.malamCount > 0
+      ? (pr.malamMax > 0 ? (pr.malamScore / pr.malamMax) * 100 : (pr.malamServedWeight > 0 ? (pr.malamWasteWeight / pr.malamServedWeight) * 100 : 0))
+      : null;
+
     return {
       ...pr,
-      wastePercentage
+      wastePercentage,
+      pagiPercent,
+      siangPercent,
+      malamPercent
     };
   });
 
@@ -511,9 +581,12 @@ export default function Reports() {
       'No. Kamar': pr.roomNumber,
       'Jenis Diet': pr.dietType,
       'Jumlah Asesmen': pr.totalAssessments,
-      'Total Sisa (gram)': pr.totalWasteWeight,
-      'Persentase Sisa Makanan (%)': pr.wastePercentage.toFixed(1) + '%',
-      'Status Efisiensi': pr.wastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
+      'Sisa Pagi (%)': pr.pagiPercent !== null ? pr.pagiPercent.toFixed(1) + '%' : '-',
+      'Sisa Siang (%)': pr.siangPercent !== null ? pr.siangPercent.toFixed(1) + '%' : '-',
+      'Sisa Malam (%)': pr.malamPercent !== null ? pr.malamPercent.toFixed(1) + '%' : '-',
+      'Rata-rata Total (%)': pr.wastePercentage.toFixed(1) + '%',
+      'Sisa <= 25%': pr.wastePercentage <= 25 ? 'Ya' : 'Tidak',
+      'Status Efisiensi': pr.wastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
     }));
 
     const filename = `Rekapitulasi_Sisa_Makan_Pasien_${selectedMonth}.xlsx`;
@@ -538,13 +611,13 @@ export default function Reports() {
     doc.setTextColor(100);
     doc.text(`Dicetak pada: ${printedAt} WITA`, 220, 22);
 
-    const efficientCount = patientRecaps.filter(p => p.wastePercentage <= 20).length;
-    const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 20).length;
+    const efficientCount = patientRecaps.filter(p => p.wastePercentage <= 25).length;
+    const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 25).length;
 
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(71, 85, 105);
-    doc.text(`Total Pasien Ter-observasi: ${patientRecaps.length} Pasien | Sisa <= 20%: ${efficientCount} | Sisa > 20%: ${highWasteCount}`, 14, 28);
+    doc.text(`Total Pasien Ter-observasi: ${patientRecaps.length} Pasien | Sisa <= 25%: ${efficientCount} | Sisa > 25%: ${highWasteCount}`, 14, 28);
 
     const recapTableData = patientRecaps.map((pr, index) => [
       index + 1,
@@ -553,10 +626,12 @@ export default function Reports() {
       pr.wardName,
       pr.roomNumber,
       pr.dietType,
-      `${pr.totalAssessments}x`,
+      pr.pagiPercent !== null ? `${pr.pagiPercent.toFixed(1)}%` : '-',
+      pr.siangPercent !== null ? `${pr.siangPercent.toFixed(1)}%` : '-',
+      pr.malamPercent !== null ? `${pr.malamPercent.toFixed(1)}%` : '-',
       `${pr.wastePercentage.toFixed(1)}%`,
-      pr.wastePercentage <= 20 ? 'Ya' : 'Tidak',
-      pr.wastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
+      pr.wastePercentage <= 25 ? 'Ya' : 'Tidak',
+      pr.wastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
     ]);
 
     autoTable(doc, {
@@ -569,9 +644,11 @@ export default function Reports() {
           'Ruang Rawat',
           'No. Kamar',
           'Jenis Diet',
-          'Jml Asesmen',
-          'Rata-rata Sisa (%)',
-          'Sisa <= 20%',
+          'Sisa Pagi',
+          'Sisa Siang',
+          'Sisa Malam',
+          'Rata-rata Total',
+          'Sisa <= 25%',
           'Status Efisiensi'
         ]
       ],
@@ -592,15 +669,17 @@ export default function Reports() {
       },
       columnStyles: {
         0: { halign: 'center', cellWidth: 10 },
-        1: { halign: 'center', cellWidth: 25 },
-        2: { cellWidth: 45 },
-        3: { cellWidth: 35 },
-        4: { halign: 'center', cellWidth: 20 },
-        5: { cellWidth: 25 },
-        6: { halign: 'center', cellWidth: 22 },
-        7: { halign: 'center', cellWidth: 28 },
+        1: { halign: 'center', cellWidth: 22 },
+        2: { cellWidth: 38 },
+        3: { cellWidth: 28 },
+        4: { halign: 'center', cellWidth: 18 },
+        5: { cellWidth: 22 },
+        6: { halign: 'center', cellWidth: 20 },
+        7: { halign: 'center', cellWidth: 20 },
         8: { halign: 'center', cellWidth: 20 },
-        9: { halign: 'center', cellWidth: 35 }
+        9: { halign: 'center', cellWidth: 22 },
+        10: { halign: 'center', cellWidth: 18 },
+        11: { halign: 'center', cellWidth: 32 }
       }
     });
 
@@ -776,7 +855,7 @@ export default function Reports() {
         wastePercentNum = stdWeight > 0 ? (t.wasteWeight / stdWeight) * 100 : 0;
       }
 
-      const isLE20 = wastePercentNum <= 20;
+      const isLE25 = wastePercentNum <= 25;
       const methodStr = (t.comstockScale !== undefined && t.comstockScale !== null) ? 'Comstock' : 'Timbang';
 
       return [
@@ -788,8 +867,8 @@ export default function Reports() {
         t.dietType || 'Biasa',
         methodStr,
         `${wastePercentNum.toFixed(1)}%`,
-        isLE20 ? 'v' : '',
-        !isLE20 ? 'v' : '',
+        isLE25 ? 'v' : '',
+        !isLE25 ? 'v' : '',
         t.reason || '-',
         t.staffName || t.staffInCharge || 'Ahli Gizi'
       ];
@@ -807,7 +886,7 @@ export default function Reports() {
           { content: 'Jenis Diet', rowSpan: 2 },
           { content: 'Metode Pengukuran\n(Comstock/Timbang)', rowSpan: 2 },
           { content: 'Estimasi Sisa\nMakanan (%)', rowSpan: 2 },
-          { content: 'Sisa <= 20%', colSpan: 2, styles: { halign: 'center' } },
+          { content: 'Sisa <= 25%', colSpan: 2, styles: { halign: 'center' } },
           { content: 'Alasan Tidak Habis', rowSpan: 2 },
           { content: 'Nama Ahli Gizi', rowSpan: 2 }
         ],
@@ -866,13 +945,13 @@ export default function Reports() {
     doc.setTextColor(15, 23, 42);
     doc.text(`REKAPITULASI SISA MAKANAN PASIEN (${monthYearFormatted.toUpperCase()})`, 14, recapStartY);
 
-    const efficientCount = patientRecaps.filter(p => p.wastePercentage <= 20).length;
-    const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 20).length;
+    const efficientCount = patientRecaps.filter(p => p.wastePercentage <= 25).length;
+    const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 25).length;
 
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(71, 85, 105);
-    doc.text(`Total Pasien: ${patientRecaps.length} Pasien  |  Efisien (Sisa <= 20%): ${efficientCount} Pasien  |  Sisa Tinggi (> 20%): ${highWasteCount} Pasien`, 14, recapStartY + 6);
+    doc.text(`Total Pasien: ${patientRecaps.length} Pasien  |  Efisien (Sisa <= 25%): ${efficientCount} Pasien  |  Sisa Tinggi (> 25%): ${highWasteCount} Pasien`, 14, recapStartY + 6);
 
     const recapTableData = patientRecaps.map((pr, index) => [
       index + 1,
@@ -880,10 +959,12 @@ export default function Reports() {
       `${pr.patientName} (${pr.patientGender})`,
       pr.wardName,
       pr.dietType,
-      `${pr.totalAssessments}x`,
+      pr.pagiPercent !== null ? `${pr.pagiPercent.toFixed(1)}%` : '-',
+      pr.siangPercent !== null ? `${pr.siangPercent.toFixed(1)}%` : '-',
+      pr.malamPercent !== null ? `${pr.malamPercent.toFixed(1)}%` : '-',
       `${pr.wastePercentage.toFixed(1)}%`,
-      pr.wastePercentage <= 20 ? 'Ya' : 'Tidak',
-      pr.wastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
+      pr.wastePercentage <= 25 ? 'Ya' : 'Tidak',
+      pr.wastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
     ]);
 
     autoTable(doc, {
@@ -895,9 +976,11 @@ export default function Reports() {
           'Nama Pasien',
           'Ruang Rawat',
           'Jenis Diet',
-          'Jml Asesmen',
-          'Rata-rata Sisa (%)',
-          'Sisa <= 20%',
+          'Sisa Pagi (%)',
+          'Sisa Siang (%)',
+          'Sisa Malam (%)',
+          'Rata-rata Total (%)',
+          'Sisa <= 25%',
           'Status Efisiensi'
         ]
       ],
@@ -918,14 +1001,16 @@ export default function Reports() {
       },
       columnStyles: {
         0: { halign: 'center', cellWidth: 10 },
-        1: { halign: 'center', cellWidth: 25 },
-        2: { cellWidth: 45 },
-        3: { cellWidth: 35 },
-        4: { cellWidth: 25 },
+        1: { halign: 'center', cellWidth: 22 },
+        2: { cellWidth: 38 },
+        3: { cellWidth: 30 },
+        4: { cellWidth: 20 },
         5: { halign: 'center', cellWidth: 22 },
-        6: { halign: 'center', cellWidth: 30 },
-        7: { halign: 'center', cellWidth: 20 },
-        8: { halign: 'center', cellWidth: 40 }
+        6: { halign: 'center', cellWidth: 22 },
+        7: { halign: 'center', cellWidth: 22 },
+        8: { halign: 'center', cellWidth: 25 },
+        9: { halign: 'center', cellWidth: 18 },
+        10: { halign: 'center', cellWidth: 32 }
       }
     });
 
@@ -1219,8 +1304,10 @@ export default function Reports() {
                   <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Nama Pasien</th>
                   <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Ruang Rawat / Unit</th>
                   <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Diet</th>
-                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Asesmen (Siang)</th>
-                  <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">% Sisa Makanan</th>
+                  <th className="px-4 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Pagi</th>
+                  <th className="px-4 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Siang</th>
+                  <th className="px-4 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Malam</th>
+                  <th className="px-4 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Rata-rata</th>
                   <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Status</th>
                   <th className="px-6 py-4 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-right">Aksi</th>
                 </tr>
@@ -1229,18 +1316,18 @@ export default function Reports() {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="animate-pulse">
-                      <td colSpan={8} className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
+                      <td colSpan={10} className="px-6 py-4"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
                     </tr>
                   ))
                 ) : patientRecaps.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-slate-400 italic">
+                    <td colSpan={10} className="px-6 py-12 text-center text-slate-400 italic">
                       Tidak ada data rekapitulasi pasien untuk kriteria ini.
                     </td>
                   </tr>
                 ) : (
                   patientRecaps.map(pr => {
-                    const isHighWaste = pr.wastePercentage > 20;
+                    const isHighWaste = pr.wastePercentage > 25;
                     return (
                       <tr key={pr.patientKey} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 font-mono font-bold text-slate-700">
@@ -1263,10 +1350,16 @@ export default function Reports() {
                             {pr.dietType}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-center font-bold text-slate-600">
-                          {pr.totalAssessments}x
+                        <td className="px-4 py-4 text-center font-mono font-bold text-slate-600">
+                          {pr.pagiPercent !== null ? `${pr.pagiPercent.toFixed(1)}%` : '-'}
                         </td>
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-4 py-4 text-center font-mono font-bold text-slate-600">
+                          {pr.siangPercent !== null ? `${pr.siangPercent.toFixed(1)}%` : '-'}
+                        </td>
+                        <td className="px-4 py-4 text-center font-mono font-bold text-slate-600">
+                          {pr.malamPercent !== null ? `${pr.malamPercent.toFixed(1)}%` : '-'}
+                        </td>
+                        <td className="px-4 py-4 text-center">
                           <span className={`font-mono font-black text-sm ${isHighWaste ? 'text-rose-600' : 'text-emerald-600'}`}>
                             {pr.wastePercentage.toFixed(1)}%
                           </span>
@@ -1277,7 +1370,7 @@ export default function Reports() {
                             ? 'bg-rose-50 text-rose-600 border border-rose-200' 
                             : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
                           }`}>
-                            {isHighWaste ? 'Sisa Tinggi (>20%)' : 'Efisien (≤20%)'}
+                            {isHighWaste ? 'Sisa Tinggi (>25%)' : 'Efisien (≤25%)'}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right space-x-2">
