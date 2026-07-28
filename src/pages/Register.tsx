@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { AlertCircle, UserPlus, Fingerprint, ShieldAlert, User, Sparkles } from 'lucide-react';
+import { AlertCircle, UserPlus, Fingerprint, ShieldAlert, User } from 'lucide-react';
 import { FirebaseError } from 'firebase/app';
 import { Role } from '../types';
 
@@ -15,65 +15,6 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-
-  const handleInstantLogin = async (targetRole: Role) => {
-    setIsLoading(true);
-    setError(null);
-    setRole(targetRole);
-    const demoEmail = targetRole === 'admin' ? 'admin.demo@rsud.com' : 'petugas.demo@rsud.com';
-    const demoPassword = 'password123';
-
-    try {
-      // Try to sign in
-      const userCredential = await signInWithEmailAndPassword(auth, demoEmail, demoPassword);
-      const user = userCredential.user;
-      
-      // Ensure profile exists in Firestore with role and name to bypass CompleteProfile screen
-      const docRef = doc(db, 'users', user.uid);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists() || !docSnap.data().name) {
-        await setDoc(docRef, {
-          email: demoEmail,
-          role: targetRole,
-          name: targetRole === 'admin' ? 'Dr. Nabila (Admin Demo)' : 'Faza, S.Gz (Petugas Gizi Demo)',
-          nip: targetRole === 'admin' ? '199001012015011001' : '199505052020022002',
-          assignedWardId: 'ward_all',
-          createdAt: serverTimestamp(),
-        }, { merge: true });
-      }
-      navigate('/');
-    } catch (err: any) {
-      // If user does not exist, create the user
-      if (
-        err.code === 'auth/user-not-found' || 
-        err.code === 'auth/wrong-password' || 
-        err.code === 'auth/invalid-credential' || 
-        err.code === 'auth/invalid-login-credentials'
-      ) {
-        try {
-          const usrCred = await createUserWithEmailAndPassword(auth, demoEmail, demoPassword);
-          const user = usrCred.user;
-          await setDoc(doc(db, 'users', user.uid), {
-            email: demoEmail,
-            role: targetRole,
-            name: targetRole === 'admin' ? 'Dr. Nabila (Admin Demo)' : 'Faza, S.Gz (Petugas Gizi Demo)',
-            nip: targetRole === 'admin' ? '199001012015011001' : '199505052020022002',
-            assignedWardId: 'ward_all',
-            createdAt: serverTimestamp(),
-          });
-          navigate('/');
-        } catch (innerErr: any) {
-          console.error('Simulasi Register gagal:', innerErr);
-          setError('Gagal membuat akun simulasi: ' + innerErr.message);
-        }
-      } else {
-        console.error('Simulasi Login gagal:', err);
-        setError('Gagal masuk simulasi: ' + err.message);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,29 +85,25 @@ export default function Register() {
         <form onSubmit={handleRegister} className="space-y-4">
           {/* Role Selection */}
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Jabatan / Role</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Jabatan / Role Akun</label>
             <div className="grid grid-cols-2 gap-3 bg-slate-100 p-1 rounded-2xl h-[58px]">
               <button
                 type="button"
-                onClick={() => handleInstantLogin('admin')}
-                className={`flex items-center justify-center gap-1.5 text-xs font-black rounded-xl transition-all ${role === 'admin' ? 'bg-white text-emerald-600 shadow-sm font-bold' : 'text-slate-400 hover:text-slate-600'}`}
+                onClick={() => setRole('admin')}
+                className={`flex items-center justify-center gap-1.5 text-xs font-black rounded-xl transition-all cursor-pointer ${role === 'admin' ? 'bg-white text-emerald-600 shadow-sm font-bold' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 <ShieldAlert size={14} />
                 ADMIN
               </button>
               <button
                 type="button"
-                onClick={() => handleInstantLogin('nutritionist')}
-                className={`flex items-center justify-center gap-1.5 text-xs font-black rounded-xl transition-all ${role === 'nutritionist' ? 'bg-white text-emerald-600 shadow-sm font-bold' : 'text-slate-400 hover:text-slate-600'}`}
+                onClick={() => setRole('nutritionist')}
+                className={`flex items-center justify-center gap-1.5 text-xs font-black rounded-xl transition-all cursor-pointer ${role === 'nutritionist' ? 'bg-white text-emerald-600 shadow-sm font-bold' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 <User size={14} />
                 PETUGAS GIZI
               </button>
             </div>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1 px-1 flex items-center gap-1">
-              <Sparkles size={11} className="shrink-0 text-emerald-500" />
-              Klik pilihan jabatan di atas untuk masuk langsung secara otomatis (simulasi)
-            </p>
           </div>
 
           <div className="space-y-1">

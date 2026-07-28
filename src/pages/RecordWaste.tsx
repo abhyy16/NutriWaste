@@ -439,76 +439,73 @@ export default function RecordWaste() {
                 <span className="text-[10px] font-black bg-emerald-700 text-white px-3 py-1 rounded-full uppercase tracking-widest">Wajib Diisi</span>
               </div>
 
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Nama Pasien</label>
-                    <input
-                      type="text"
-                      value={patientName}
-                      onChange={(e) => setPatientName(e.target.value)}
-                      placeholder="Nama lengkap pasien"
-                      className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-emerald-800 uppercase tracking-widest ml-1">NOMER REKAM MEDIS (NO. RM)</label>
-                    <input
-                      type="text"
-                      value={medicalRecordNumber}
-                      onChange={(e) => setMedicalRecordNumber(e.target.value)}
-                      placeholder="Cth: RM-2024-001"
-                      className="w-full px-4 py-3.5 rounded-2xl border border-emerald-300 bg-emerald-50/30 outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
-                    />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Nama Pasien</label>
+                  <input
+                    type="text"
+                    value={patientName}
+                    onChange={(e) => setPatientName(e.target.value)}
+                    placeholder="Nama lengkap pasien"
+                    className="w-full h-[52px] px-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-emerald-800 uppercase tracking-widest ml-1">Nomer Rekam Medis (No. RM)</label>
+                  <input
+                    type="text"
+                    value={medicalRecordNumber}
+                    onChange={(e) => setMedicalRecordNumber(e.target.value)}
+                    placeholder="Cth: RM-2024-001"
+                    className="w-full h-[52px] px-4 rounded-2xl border border-emerald-300 bg-emerald-50/30 outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Umur Pasien (Tahun)</label>
+                  <input
+                    type="number"
+                    value={patientAge}
+                    onChange={(e) => setPatientAge(e.target.value)}
+                    placeholder="Cth: 45"
+                    className="w-full h-[52px] px-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Jenis Kelamin</label>
+                  <div className="flex bg-slate-200/70 p-1 rounded-2xl h-[52px] border border-slate-300/60">
+                    {(['L', 'P'] as const).map(g => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setPatientGender(g)}
+                        className={`flex-1 flex items-center justify-center text-xs font-black rounded-xl transition-all cursor-pointer ${patientGender === g ? 'bg-white text-emerald-800 shadow-sm font-black' : 'text-slate-600 hover:text-slate-900'}`}
+                      >
+                        {g === 'L' ? 'LAKI-LAKI' : 'PEREMPUAN'}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Umur</label>
-                    <input
-                      type="number"
-                      value={patientAge}
-                      onChange={(e) => setPatientAge(e.target.value)}
-                      placeholder="Thn"
-                      className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Jenis Kelamin</label>
-                    <div className="flex bg-slate-200/60 p-1 rounded-2xl h-[52px]">
-                      {(['L', 'P'] as const).map(g => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setPatientGender(g)}
-                          className={`flex-1 flex items-center justify-center text-xs font-black rounded-xl transition-all ${patientGender === g ? 'bg-white text-emerald-800 shadow-sm font-black' : 'text-slate-600 hover:text-slate-850'}`}
-                        >
-                          {g === 'L' ? 'LAKI-LAKI' : 'PEREMPUAN'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Detail Ruang Rawat / No. Kamar</label>
-                    <input
-                      type="text"
-                      value={roomNumber}
-                      onChange={(e) => setRoomNumber(e.target.value)}
-                      placeholder="Cth: Ruang Melati / 102"
-                      className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Petugas PJ Ruangan</label>
-                    <input
-                      type="text"
-                      value={staffInCharge}
-                      onChange={(e) => setStaffInCharge(e.target.value)}
-                      placeholder="Nama penanggung jawab"
-                      className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
-                    />
-                  </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Detail Ruang Rawat / No. Kamar</label>
+                  <input
+                    type="text"
+                    value={roomNumber}
+                    onChange={(e) => setRoomNumber(e.target.value)}
+                    placeholder="Cth: Ruang Melati / 102"
+                    className="w-full h-[52px] px-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Petugas PJ Ruangan</label>
+                  <input
+                    type="text"
+                    value={staffInCharge}
+                    onChange={(e) => setStaffInCharge(e.target.value)}
+                    placeholder="Nama penanggung jawab"
+                    className="w-full h-[52px] px-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400"
+                  />
                 </div>
               </div>
             </div>
