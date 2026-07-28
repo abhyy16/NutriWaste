@@ -133,7 +133,7 @@ export default function Layout() {
       </header>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex sticky top-0 h-screen w-64 bg-white border-r border-slate-200 flex-col z-40">
+      <aside className="hidden md:flex sticky top-0 h-screen w-64 bg-white border-r border-slate-200 flex-col z-20">
         <SidebarContent />
       </aside>
 
@@ -171,7 +171,7 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-8 lg:p-12 pb-36 md:pb-8 lg:pb-12 max-w-7xl mx-auto w-full z-10 md:overflow-y-auto md:h-full">
+      <main className="flex-1 p-4 md:p-8 lg:p-12 pb-36 md:pb-8 lg:pb-12 max-w-7xl mx-auto w-full md:overflow-y-auto md:h-full">
         <Outlet />
       </main>
 

@@ -3,7 +3,7 @@ import { collection, getDocs, query, orderBy, where, doc, updateDoc, deleteDoc }
 import { db } from '../lib/firebase';
 import { Transaction, Menu, Ward, COMSTOCK_VALUES, MealTime } from '../types';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search, X, Info, FileText, Activity, ShieldCheck, ChevronDown, ChevronUp, Pencil, Edit3, Save, CheckCircle2, Trash2, AlertTriangle, Eye, FileSpreadsheet, Download } from 'lucide-react';
+import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search, X, Info, FileText, Activity, ShieldCheck, ChevronDown, ChevronUp, Pencil, Edit3, Save, CheckCircle2, Trash2, AlertTriangle, Eye, FileSpreadsheet, Download, Maximize2, Minimize2, ExternalLink, Printer, ZoomIn, ZoomOut, RotateCcw, LayoutList } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -136,12 +136,18 @@ export default function Reports() {
     blobUrl: string;
     filename: string;
     doc: jsPDF | null;
+    isMaximized: boolean;
+    viewMode: 'pdf' | 'interactive';
+    zoomLevel: number;
   }>({
     isOpen: false,
     title: '',
     blobUrl: '',
     filename: '',
-    doc: null
+    doc: null,
+    isMaximized: false,
+    viewMode: 'pdf',
+    zoomLevel: 100
   });
 
   const [previewExcelModal, setPreviewExcelModal] = useState<{
@@ -170,7 +176,10 @@ export default function Reports() {
       title,
       blobUrl,
       filename,
-      doc
+      doc,
+      isMaximized: false,
+      viewMode: 'pdf',
+      zoomLevel: 100
     });
   };
 
@@ -356,6 +365,10 @@ export default function Reports() {
     malamWasteWeight: number;
     malamServedWeight: number;
     malamCount: number;
+    reasonsSet: Set<string>;
+    staffSet: Set<string>;
+    methodsSet: Set<string>;
+    latestTimestamp: Date;
     sampleTx: Transaction;
   }>();
 
@@ -369,7 +382,20 @@ export default function Reports() {
     const isPagi = mt.includes('pagi') || mt.includes('sarapan');
     const isMalam = mt.includes('malam');
 
+    const tReason = (t.reason || '').trim();
+    const tStaff = (t.staffName || t.staffInCharge || '').trim();
+    const tMethod = (t.comstockScale !== undefined && t.comstockScale !== null) ? 'Comstock' : 'Timbang';
+    const tDate = t.timestamp || new Date();
+
     if (!existing) {
+      const reasonsSet = new Set<string>();
+      if (tReason && tReason !== '-') reasonsSet.add(tReason);
+
+      const staffSet = new Set<string>();
+      if (tStaff && tStaff !== '-') staffSet.add(tStaff);
+
+      const methodsSet = new Set<string>([tMethod]);
+
       patientRecapMap.set(key, {
         patientKey: key,
         medicalRecordNumber: t.medicalRecordNumber || '-',
@@ -399,6 +425,10 @@ export default function Reports() {
         malamWasteWeight: isMalam ? t.wasteWeight : 0,
         malamServedWeight: isMalam ? stdW : 0,
         malamCount: isMalam ? 1 : 0,
+        reasonsSet,
+        staffSet,
+        methodsSet,
+        latestTimestamp: tDate,
         sampleTx: t
       });
     } else {
@@ -407,6 +437,11 @@ export default function Reports() {
       existing.totalComstockMax += 5;
       existing.totalWasteWeight += t.wasteWeight;
       existing.totalServedWeight += stdW;
+
+      if (tReason && tReason !== '-') existing.reasonsSet.add(tReason);
+      if (tStaff && tStaff !== '-') existing.staffSet.add(tStaff);
+      existing.methodsSet.add(tMethod);
+      if (tDate > existing.latestTimestamp) existing.latestTimestamp = tDate;
 
       if (isPagi) {
         existing.pagiScore += cScale;
@@ -448,12 +483,21 @@ export default function Reports() {
       ? (pr.malamMax > 0 ? (pr.malamScore / pr.malamMax) * 100 : (pr.malamServedWeight > 0 ? (pr.malamWasteWeight / pr.malamServedWeight) * 100 : 0))
       : null;
 
+    const reasonsStr = Array.from(pr.reasonsSet).join(', ') || '-';
+    const staffStr = Array.from(pr.staffSet).join(', ') || 'Ahli Gizi';
+    const methodStr = Array.from(pr.methodsSet).join('/') || 'Comstock';
+    const latestDateStr = format(pr.latestTimestamp, 'dd/MM/yyyy');
+
     return {
       ...pr,
       wastePercentage,
       pagiPercent,
       siangPercent,
-      malamPercent
+      malamPercent,
+      reasonsStr,
+      staffStr,
+      methodStr,
+      latestDateStr
     };
   });
 
@@ -872,30 +916,26 @@ export default function Reports() {
   const minCycle = activeCycles.length > 0 ? activeCycles.reduce((prev, current) => (prev.percentage < current.percentage) ? prev : current) : null;
 
   const exportToExcel = () => {
-    const data = filteredTransactions.map(t => {
-      const menu = menus.find(m => m.id === t.menuId);
-      const ward = wards.find(w => w.id === t.wardId);
-      const stdWeight = t.wasteWeight + t.consumptionWeight;
-      const wastePercent = stdWeight > 0 ? ((t.wasteWeight / stdWeight) * 100).toFixed(1) : '0';
+    const data = patientRecaps.map((pr, index) => {
+      const isLE25 = pr.wastePercentage <= 25;
 
       return {
-        'Tanggal': format(t.timestamp || new Date(), 'dd/MM/yyyy'),
-        'Waktu': format(t.timestamp || new Date(), 'HH:mm'),
-        'Nama Pasien': t.patientName,
-        'JK': t.patientGender || '-',
-        'Umur': t.patientAge,
-        'Unit/Bangsal': ward?.name || 'Unknown',
-        'No. Kamar': t.roomNumber || '-',
-        'PJ Ruangan': t.staffInCharge || '-',
-        'Jenis Diet': t.dietType || 'Biasa',
-        'Menu': menu?.foodItems || 'Menu Siklus',
-        'Waktu Makan': (t.mealTime || '').replace('_', ' ').toUpperCase(),
-        'Jenis Makanan': t.foodType || 'Makanan Pokok',
-        'Berat Sisa (g)': t.wasteWeight,
-        'Berat Standar (g)': stdWeight || 400,
-        'Persentase Waste (%)': wastePercent,
-        'Alasan': t.reason || '-',
-        'Petugas Entry': t.staffName || '-'
+        'No.': index + 1,
+        'Tanggal Observasi': pr.latestDateStr || format(new Date(), 'dd/MM/yyyy'),
+        'Nama Pasien': pr.patientName,
+        'JK': pr.patientGender || '-',
+        'No. RM': pr.medicalRecordNumber || '-',
+        'Ruang Rawat': pr.wardName || '-',
+        'Jenis Diet': pr.dietType || 'Biasa',
+        'Metode Pengukuran': pr.methodStr || 'Comstock',
+        'Sisa Pagi (%)': pr.pagiPercent !== null ? `${pr.pagiPercent.toFixed(1)}%` : '-',
+        'Sisa Siang (%)': pr.siangPercent !== null ? `${pr.siangPercent.toFixed(1)}%` : '-',
+        'Sisa Malam (%)': pr.malamPercent !== null ? `${pr.malamPercent.toFixed(1)}%` : '-',
+        'Estimasi Sisa Makanan (%)': `${pr.wastePercentage.toFixed(1)}%`,
+        'Sisa <= 25%': isLE25 ? 'Ya' : 'Tidak',
+        'Status Efisiensi': isLE25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)',
+        'Alasan Tidak Habis': pr.reasonsStr || '-',
+        'Nama Ahli Gizi': pr.staffStr || 'Ahli Gizi'
       };
     });
 
@@ -923,34 +963,23 @@ export default function Reports() {
     doc.setTextColor(100);
     doc.text(`Dicetak pada: ${printedAt} WITA`, 220, 22);
 
-    // Tabel 1: Log Observasi Data Sisa Makanan (11 Kolom sesuai gambar)
-    const tableData = filteredTransactions.map((t, index) => {
-      const ward = wards.find(w => w.id === t.wardId);
-      
-      let wastePercentNum = 0;
-      if (t.comstockScale !== undefined && t.comstockScale !== null) {
-        wastePercentNum = (t.comstockScale / 5) * 100;
-      } else {
-        const stdWeight = (t.wasteWeight + t.consumptionWeight) || 400;
-        wastePercentNum = stdWeight > 0 ? (t.wasteWeight / stdWeight) * 100 : 0;
-      }
-
-      const isLE25 = wastePercentNum <= 25;
-      const methodStr = (t.comstockScale !== undefined && t.comstockScale !== null) ? 'Comstock' : 'Timbang';
+    // Tabel 1: Log Observasi Data Sisa Makanan Per Pasien (1 Pasien = 1 Baris)
+    const tableData = patientRecaps.map((pr, index) => {
+      const isLE25 = pr.wastePercentage <= 25;
 
       return [
         index + 1,
-        format(t.timestamp || new Date(), 'dd/MM/yyyy'),
-        `${t.patientName} (${t.patientGender || '-'})`,
-        t.medicalRecordNumber || '-',
-        t.wardName || ward?.name || 'Rawat Inap',
-        t.dietType || 'Biasa',
-        methodStr,
-        `${wastePercentNum.toFixed(1)}%`,
+        pr.latestDateStr || format(new Date(), 'dd/MM/yyyy'),
+        `${pr.patientName} (${pr.patientGender || '-'})`,
+        pr.medicalRecordNumber || '-',
+        pr.wardName || 'Rawat Inap',
+        pr.dietType || 'Biasa',
+        pr.methodStr || 'Comstock',
+        `${pr.wastePercentage.toFixed(1)}%`,
         isLE25 ? 'v' : '',
         !isLE25 ? 'v' : '',
-        t.reason || '-',
-        t.staffName || t.staffInCharge || 'Ahli Gizi'
+        pr.reasonsStr || '-',
+        pr.staffStr || 'Ahli Gizi'
       ];
     });
 
@@ -1649,7 +1678,7 @@ export default function Reports() {
 
       {/* Edit Patient Modal Dialog */}
       {editingPatient && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] overflow-y-auto">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1780,7 +1809,7 @@ export default function Reports() {
 
       {/* Single Transaction Edit Modal */}
       {editingSingleTx && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] overflow-y-auto">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1998,7 +2027,7 @@ export default function Reports() {
         });
 
         return (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] overflow-y-auto">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -2274,60 +2303,328 @@ export default function Reports() {
       {/* PDF PREVIEW MODAL */}
       <AnimatePresence>
         {previewPdfModal.isOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-md flex items-center justify-center ${previewPdfModal.isMaximized ? 'p-0' : 'p-2 sm:p-4 md:p-6'}`}>
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]"
+              className={`bg-slate-900 text-white shadow-2xl border border-slate-800 flex flex-col overflow-hidden w-full transition-all duration-300 ${
+                previewPdfModal.isMaximized 
+                  ? 'h-screen max-h-screen rounded-none border-0' 
+                  : 'max-w-6xl h-[92vh] max-h-[92vh] rounded-3xl'
+              }`}
             >
               {/* Modal Header */}
-              <div className="p-6 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="p-4 md:p-5 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30">
+                  <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-2xl border border-emerald-500/30">
                     <FileText size={20} />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-base text-white">{previewPdfModal.title}</h3>
-                    <p className="text-xs text-slate-400">Pratinjau Dokumen Laporan Sebelum Diunduh</p>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-extrabold text-sm md:text-base text-white tracking-tight">{previewPdfModal.title}</h3>
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-800/50">
+                        Pratinjau Dokumen
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate max-w-md">
+                      {previewPdfModal.filename}
+                    </p>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setPreviewPdfModal(prev => ({ ...prev, isOpen: false }))}
-                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
-                >
-                  <X size={20} />
-                </button>
+
+                {/* Top Action Toolbar */}
+                <div className="flex items-center gap-2">
+                  {/* Mode Selector */}
+                  <div className="hidden sm:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPdfModal(prev => ({ ...prev, viewMode: 'pdf' }))}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                        previewPdfModal.viewMode === 'pdf' 
+                          ? 'bg-emerald-600 text-white shadow-sm' 
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <FileText size={14} />
+                      <span>PDF Native</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPdfModal(prev => ({ ...prev, viewMode: 'interactive' }))}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                        previewPdfModal.viewMode === 'interactive' 
+                          ? 'bg-emerald-600 text-white shadow-sm' 
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <LayoutList size={14} />
+                      <span>Lembar Dokumen</span>
+                    </button>
+                  </div>
+
+                  {/* Open in New Tab */}
+                  {previewPdfModal.blobUrl && (
+                    <button
+                      type="button"
+                      onClick={() => window.open(previewPdfModal.blobUrl, '_blank')}
+                      title="Buka Dokumen di Tab Baru"
+                      className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+                    >
+                      <ExternalLink size={16} />
+                      <span className="hidden md:inline">Buka Tab Baru</span>
+                    </button>
+                  )}
+
+                  {/* Print Direct */}
+                  {previewPdfModal.blobUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const win = window.open(previewPdfModal.blobUrl, '_blank');
+                        if (win) {
+                          win.focus();
+                          setTimeout(() => win.print(), 500);
+                        }
+                      }}
+                      title="Cetak Dokumen"
+                      className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+                    >
+                      <Printer size={16} />
+                      <span className="hidden md:inline">Cetak</span>
+                    </button>
+                  )}
+
+                  {/* Maximize / Fullscreen Toggle */}
+                  <button 
+                    type="button"
+                    onClick={() => setPreviewPdfModal(prev => ({ ...prev, isMaximized: !prev.isMaximized }))}
+                    title={previewPdfModal.isMaximized ? "Perkecil Ukuran Modal" : "Layar Penuh"}
+                    className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition cursor-pointer"
+                  >
+                    {previewPdfModal.isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                  </button>
+
+                  {/* Close Modal */}
+                  <button 
+                    type="button"
+                    onClick={() => setPreviewPdfModal(prev => ({ ...prev, isOpen: false }))}
+                    className="p-2.5 bg-slate-800 hover:bg-red-600/80 text-slate-400 hover:text-white rounded-xl border border-slate-700 transition cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
 
-              {/* Modal Body - PDF Iframe */}
-              <div className="p-4 bg-slate-100 flex-1 overflow-hidden min-h-[450px]">
-                {previewPdfModal.blobUrl ? (
-                  <iframe 
-                    src={previewPdfModal.blobUrl} 
-                    className="w-full h-full min-h-[450px] rounded-2xl border border-slate-200 shadow-inner"
-                    title="PDF Preview"
-                  />
+              {/* Sub-toolbar for Zoom Controls in PDF View Mode */}
+              <div className="px-4 py-2 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Mode View:</span>
+                  <div className="flex sm:hidden items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPdfModal(prev => ({ ...prev, viewMode: 'pdf' }))}
+                      className={`px-2 py-1 text-[10px] font-bold rounded ${previewPdfModal.viewMode === 'pdf' ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}
+                    >
+                      PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPdfModal(prev => ({ ...prev, viewMode: 'interactive' }))}
+                      className={`px-2 py-1 text-[10px] font-bold rounded ${previewPdfModal.viewMode === 'interactive' ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}
+                    >
+                      Lembar Dokumen
+                    </button>
+                  </div>
+                  <span className="hidden sm:inline text-slate-300 font-semibold">
+                    {previewPdfModal.viewMode === 'pdf' ? 'PDF Stream Reader (Fit Width & Scroll)' : 'Simulasi Lembar Cetak Dokumen A4'}
+                  </span>
+                </div>
+
+                {previewPdfModal.viewMode === 'pdf' ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 hidden sm:inline">Skala Zoom:</span>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPdfModal(prev => ({ ...prev, zoomLevel: Math.max(75, prev.zoomLevel - 15) }))}
+                      className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800 transition cursor-pointer"
+                      title="Perkecil Zoom"
+                    >
+                      <ZoomOut size={14} />
+                    </button>
+                    <span className="px-2 font-mono font-bold text-emerald-400 text-xs min-w-[45px] text-center">
+                      {previewPdfModal.zoomLevel}%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPdfModal(prev => ({ ...prev, zoomLevel: Math.min(175, prev.zoomLevel + 15) }))}
+                      className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800 transition cursor-pointer"
+                      title="Perbesar Zoom"
+                    >
+                      <ZoomIn size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPdfModal(prev => ({ ...prev, zoomLevel: 100 }))}
+                      className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800 transition cursor-pointer ml-1"
+                      title="Reset Skala 100%"
+                    >
+                      <RotateCcw size={14} />
+                    </button>
+                  </div>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-slate-400 italic">
-                    Memuat pratinjau PDF...
+                  <span className="text-[11px] text-slate-400 italic">
+                    Gunakan scroll mouse atau gesture sentuh untuk menjelajahi seluruh isi dokumen
+                  </span>
+                )}
+              </div>
+
+              {/* Modal Body - Scrollable Container */}
+              <div className="p-2 sm:p-4 bg-slate-950 flex-1 overflow-auto min-h-[400px] flex flex-col items-center">
+                {previewPdfModal.viewMode === 'pdf' ? (
+                  /* MODE 1: PDF Iframe Viewer */
+                  previewPdfModal.blobUrl ? (
+                    <div 
+                      className="w-full h-full min-h-[500px] flex flex-col items-center overflow-auto rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl transition-all"
+                      style={{
+                        transform: previewPdfModal.zoomLevel !== 100 ? `scale(${previewPdfModal.zoomLevel / 100})` : 'none',
+                        transformOrigin: 'top center'
+                      }}
+                    >
+                      <iframe 
+                        src={`${previewPdfModal.blobUrl}#toolbar=1&navpanes=0&pagemode=none&view=FitH`} 
+                        className="w-full flex-1 min-h-[600px] rounded-2xl bg-white border-0"
+                        title="PDF Preview Viewer"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400 italic">
+                      Memuat pratinjau PDF...
+                    </div>
+                  )
+                ) : (
+                  /* MODE 2: Lembar Dokumen (Interactive Scrollable HTML View) */
+                  <div className="w-full overflow-x-auto overflow-y-auto p-2 sm:p-6 flex justify-center">
+                    <div className="bg-white text-slate-800 rounded-2xl shadow-2xl p-6 sm:p-10 border border-slate-200 min-w-[780px] max-w-4xl space-y-8 font-sans">
+                      {/* Document Header */}
+                      <div className="border-b-2 border-emerald-700 pb-4 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">RSUD / INSTALASI GIZI & DIETETIK</p>
+                          <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight mt-0.5">{previewPdfModal.title}</h2>
+                          <p className="text-xs text-slate-500 font-medium">Periode Laporan: {selectedMonth} | Status: Ter-verifikasi</p>
+                        </div>
+                        <div className="text-right font-mono text-[11px] text-slate-500">
+                          <p>Dicetak pada:</p>
+                          <p className="font-bold text-slate-700">{format(new Date(), 'dd/MM/yyyy HH:mm')} WITA</p>
+                        </div>
+                      </div>
+
+                      {/* Summary Cards Row */}
+                      <div className="grid grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Total Obsevasi</span>
+                          <strong className="text-sm font-black text-slate-800">{filteredTransactions.length} Rekam</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Total Pasien</span>
+                          <strong className="text-sm font-black text-slate-800">{totalPatients} Pasien</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Rata-rata Waste</span>
+                          <strong className="text-sm font-black text-emerald-700">{overallWastePercentage.toFixed(1)}%</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Efisiensi (&lt;=25%)</span>
+                          <strong className="text-sm font-black text-slate-800">
+                            {patientRecaps.filter(p => p.wastePercentage <= 25).length} / {patientRecaps.length} Pasien
+                          </strong>
+                        </div>
+                      </div>
+
+                      {/* Table 1: Detailed Patient Recaps */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">1. Rekapitulasi Rata-Rata Sisa Makanan Per Pasien</h4>
+                          <span className="text-[10px] font-bold text-slate-400">Total {patientRecaps.length} Pasien</span>
+                        </div>
+                        <div className="border border-slate-300 rounded-xl overflow-hidden shadow-sm">
+                          <table className="w-full text-left text-[11px]">
+                            <thead className="bg-emerald-700 text-white font-bold uppercase text-[10px] tracking-wider">
+                              <tr>
+                                <th className="px-3 py-2.5 text-center">No</th>
+                                <th className="px-3 py-2.5">No. RM</th>
+                                <th className="px-3 py-2.5">Nama Pasien</th>
+                                <th className="px-3 py-2.5">Ruang Rawat</th>
+                                <th className="px-3 py-2.5">Jenis Diet</th>
+                                <th className="px-3 py-2.5 text-center">Pagi (%)</th>
+                                <th className="px-3 py-2.5 text-center">Siang (%)</th>
+                                <th className="px-3 py-2.5 text-center">Malam (%)</th>
+                                <th className="px-3 py-2.5 text-center">Rata Total</th>
+                                <th className="px-3 py-2.5 text-center">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200">
+                              {patientRecaps.map((p, idx) => (
+                                <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                  <td className="px-3 py-2 text-center font-mono font-bold text-slate-500">{idx + 1}</td>
+                                  <td className="px-3 py-2 font-mono font-bold text-slate-700">{p.medicalRecordNumber}</td>
+                                  <td className="px-3 py-2 font-bold text-slate-800">{p.patientName} ({p.patientGender || '-'})</td>
+                                  <td className="px-3 py-2 font-medium text-slate-600">{p.wardName}</td>
+                                  <td className="px-3 py-2 text-slate-600">{p.dietType}</td>
+                                  <td className="px-3 py-2 text-center font-mono">{p.pagiPercent !== null ? `${p.pagiPercent.toFixed(1)}%` : '-'}</td>
+                                  <td className="px-3 py-2 text-center font-mono">{p.siangPercent !== null ? `${p.siangPercent.toFixed(1)}%` : '-'}</td>
+                                  <td className="px-3 py-2 text-center font-mono">{p.malamPercent !== null ? `${p.malamPercent.toFixed(1)}%` : '-'}</td>
+                                  <td className="px-3 py-2 text-center font-mono font-black text-emerald-700">{p.wastePercentage.toFixed(1)}%</td>
+                                  <td className="px-3 py-2 text-center font-bold">
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${p.wastePercentage <= 25 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                      {p.wastePercentage <= 25 ? 'Efisien' : 'Sisa Tinggi'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                              {patientRecaps.length === 0 && (
+                                <tr>
+                                  <td colSpan={10} className="p-6 text-center text-slate-400 italic">
+                                    Tidak ada data rekapitulasi pasien untuk periode bulan ini.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Footer Stamp / Signatures */}
+                      <div className="pt-8 border-t border-slate-200 flex items-end justify-between text-xs text-slate-600">
+                        <div>
+                          <p className="font-bold text-slate-800">Sistem Manajemen Nutrisi RSUD (Nutriwaste)</p>
+                          <p className="text-[11px] text-slate-400">Dokumen sah hasil olah data otomatis sistem digital gizi</p>
+                        </div>
+                        <div className="text-center space-y-12">
+                          <p className="font-semibold text-slate-700">Penanggung Jawab / Ahli Gizi,</p>
+                          <div className="border-b border-slate-800 w-48 mx-auto"></div>
+                          <p className="font-bold text-slate-900">{profile?.name || user?.displayName || 'Petugas Gizi RSUD'}</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
 
               {/* Modal Footer */}
-              <div className="p-5 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-                <span className="text-xs text-slate-500 font-mono">
-                  File: <strong className="text-slate-800">{previewPdfModal.filename}</strong>
-                </span>
+              <div className="p-4 md:p-5 bg-slate-900 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2 text-xs text-slate-400 truncate max-w-sm">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="truncate">Status File: Ready to Download & Print</span>
+                </div>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={() => setPreviewPdfModal(prev => ({ ...prev, isOpen: false }))}
-                    className="flex-1 sm:flex-none px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
+                    className="flex-1 sm:flex-none px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition cursor-pointer"
                   >
-                    Batal
+                    Tutup Pratinjau
                   </button>
                   <button
                     type="button"
@@ -2337,10 +2634,10 @@ export default function Reports() {
                       }
                       setPreviewPdfModal(prev => ({ ...prev, isOpen: false }));
                     }}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-md shadow-emerald-950/20 cursor-pointer"
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-950/40 cursor-pointer"
                   >
                     <Download size={16} />
-                    <span>Unduh File PDF</span>
+                    <span>Unduh File PDF Sekarang</span>
                   </button>
                 </div>
               </div>
@@ -2352,7 +2649,7 @@ export default function Reports() {
       {/* EXCEL PREVIEW MODAL */}
       <AnimatePresence>
         {previewExcelModal.isOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}

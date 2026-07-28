@@ -138,3 +138,89 @@ export function calculateCumulativeWasteFromTransactions(txs: Transaction[]): {
     totalPatients
   };
 }
+
+export interface GroupedPatient {
+  key: string;
+  patientName: string;
+  medicalRecordNumber: string;
+  patientGender: string;
+  patientAge: number;
+  wardId: string;
+  wardName: string;
+  roomNumber: string;
+  dietType: string;
+  latestTimestamp: Date | null;
+  avgWastePercentage: number;
+  isHighWaste: boolean;
+  items: Transaction[];
+}
+
+export function groupTransactionsByPatient(txs: Transaction[]): GroupedPatient[] {
+  if (!txs || txs.length === 0) return [];
+
+  const map = new Map<string, {
+    key: string;
+    patientName: string;
+    medicalRecordNumber: string;
+    patientGender: string;
+    patientAge: number;
+    wardId: string;
+    wardName: string;
+    roomNumber: string;
+    dietType: string;
+    latestTimestamp: Date | null;
+    items: Transaction[];
+  }>();
+
+  txs.forEach(t => {
+    const rawKey = (t.medicalRecordNumber || t.patientName || 'unnamed').trim().toLowerCase();
+    const existing = map.get(rawKey);
+    const tDate = t.timestamp || null;
+
+    if (!existing) {
+      map.set(rawKey, {
+        key: rawKey,
+        patientName: t.patientName || 'Pasien',
+        medicalRecordNumber: t.medicalRecordNumber || '-',
+        patientGender: t.patientGender || '-',
+        patientAge: t.patientAge || 0,
+        wardId: t.wardId || 'w1',
+        wardName: t.wardName || 'Rawat Inap',
+        roomNumber: t.roomNumber || '-',
+        dietType: t.dietType || 'Biasa',
+        latestTimestamp: tDate,
+        items: [t]
+      });
+    } else {
+      existing.items.push(t);
+      if (tDate && (!existing.latestTimestamp || tDate > existing.latestTimestamp)) {
+        existing.latestTimestamp = tDate;
+      }
+      if ((!existing.roomNumber || existing.roomNumber === '-') && t.roomNumber) {
+        existing.roomNumber = t.roomNumber;
+      }
+    }
+  });
+
+  return Array.from(map.values()).map(g => {
+    let avgWastePercentage = 0;
+    const hasComstock = g.items.some(i => i.comstockScale !== undefined && i.comstockScale !== null);
+    
+    if (hasComstock) {
+      const totalScore = g.items.reduce((sum, item) => sum + (item.comstockScale !== undefined && item.comstockScale !== null ? item.comstockScale : 0), 0);
+      const maxScore = g.items.length * 5;
+      avgWastePercentage = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
+    } else {
+      const sumPct = g.items.reduce((sum, item) => sum + getTransactionWastePercentage(item), 0);
+      avgWastePercentage = g.items.length > 0 ? sumPct / g.items.length : 0;
+    }
+
+    const isHighWaste = avgWastePercentage > 25 || g.items.some(i => getTransactionWastePercentage(i) > 25);
+
+    return {
+      ...g,
+      avgWastePercentage,
+      isHighWaste
+    };
+  });
+}
