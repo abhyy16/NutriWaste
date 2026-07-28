@@ -3,6 +3,7 @@ import { collection, addDoc, getDocs, serverTimestamp, query, orderBy } from 'fi
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Menu, Ward, COMSTOCK_VALUES, MealTime } from '../types';
 import { useAuth } from '../hooks/useAuth';
+import { DEFAULT_CYCLE_DATA } from '../constants/menuCycle';
 import { ClipboardCheck, CheckCircle2, User, Building2, UtensilsCrossed, Clock, Calculator } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
@@ -60,20 +61,84 @@ export default function RecordWaste() {
 
     parts.forEach(part => {
       const lower = part.toLowerCase();
-      if (lower.includes('nasi') || lower.includes('kentang') || lower.includes('bubur') || lower.includes('mie') || lower.includes('roti') || lower.includes('singkong') || lower.includes('biun') || lower.includes('terigu') || lower.includes('beras')) {
-        result['Makanan Pokok'] = result['Makanan Pokok'] ? `${result['Makanan Pokok']}, ${part}` : part;
-      } else if (lower.includes('ayam') || lower.includes('daging') || lower.includes('sapi') || lower.includes('ikan') || lower.includes('telur') || lower.includes('nila') || lower.includes('bandeng') || lower.includes('sosis') || lower.includes('udang') || lower.includes('teri') || lower.includes('hati') || lower.includes('otak')) {
-        result['Lauk Hewani'] = result['Lauk Hewani'] ? `${result['Lauk Hewani']}, ${part}` : part;
-      } else if (lower.includes('tempe') || lower.includes('tahu') || lower.includes('kacang')) {
-        if (lower.includes('panjang') || lower.includes('tauge') || lower.includes('sayur')) {
-          result['Sayuran'] = result['Sayuran'] ? `${result['Sayuran']}, ${part}` : part;
-        } else {
-          result['Lauk Nabati'] = result['Lauk Nabati'] ? `${result['Lauk Nabati']}, ${part}` : part;
-        }
-      } else if (lower.includes('bayam') || lower.includes('sayur') || lower.includes('sop') || lower.includes('kol') || lower.includes('kangkung') || lower.includes('wortel') || lower.includes('sawi') || lower.includes('selada') || lower.includes('tumis') || lower.includes('timun') || lower.includes('terong') || lower.includes('kembang kol') || lower.includes('bung')) {
+
+      // 1. First check for Daun/Vegetable terms that contain starch words (e.g. 'daun singkong', 'daun pepaya', 'daun katuk', 'daun ubi', 'kacang panjang', 'kacang kapri', 'kacang merah')
+      if (
+        lower.includes('daun singkong') || lower.includes('daun pepaya') || lower.includes('daun ubi') || 
+        lower.includes('daun katuk') || lower.includes('daun kelor') || lower.includes('daun pakis') || 
+        lower.includes('daun bawang') || lower.includes('daun kemangi') || lower.includes('daun salam') ||
+        lower.includes('kacang panjang') || lower.includes('kacang kapri') || lower.includes('kacang merah')
+      ) {
         result['Sayuran'] = result['Sayuran'] ? `${result['Sayuran']}, ${part}` : part;
-      } else {
+      } 
+      // 2. Makanan Pokok
+      else if (
+        lower.includes('nasi') || lower.includes('kentang') || lower.includes('bubur') || 
+        lower.includes('mie') || lower.includes('mi ') || lower.endsWith(' mi') || lower === 'mi' ||
+        lower.includes('roti') || lower.includes('singkong') || lower.includes('bihun') || 
+        lower.includes('biun') || lower.includes('terigu') || lower.includes('beras') || 
+        lower.includes('lontong') || lower.includes('ketupat') || lower.includes('sagu') ||
+        lower.includes('makaroni') || lower.includes('macaroni') || lower.includes('pasta') || lower.includes('ubi')
+      ) {
+        result['Makanan Pokok'] = result['Makanan Pokok'] ? `${result['Makanan Pokok']}, ${part}` : part;
+      } 
+      // 3. Lauk Hewani
+      else if (
+        lower.includes('ayam') || lower.includes('daging') || lower.includes('sapi') || 
+        lower.includes('ikan') || lower.includes('telur') || lower.includes('telor') || 
+        lower.includes('nila') || lower.includes('bandeng') || lower.includes('sosis') || 
+        lower.includes('udang') || lower.includes('teri') || lower.includes('hati') || 
+        lower.includes('otak') || lower.includes('kambing') || lower.includes('bebek') ||
+        lower.includes('gurame') || lower.includes('kakap') || lower.includes('tongkol') || 
+        lower.includes('tuna') || lower.includes('cumi') || lower.includes('bakso') || 
+        lower.includes('baso') || lower.includes('kornet') || lower.includes('nugget') || lower.includes('rolade')
+      ) {
+        result['Lauk Hewani'] = result['Lauk Hewani'] ? `${result['Lauk Hewani']}, ${part}` : part;
+      } 
+      // 4. Lauk Nabati
+      else if (
+        (lower.includes('tempe') || lower.includes('tahu') || lower.includes('tofu') || lower.includes('oncom') || lower.includes('kacang')) &&
+        !lower.includes('panjang') && !lower.includes('tauge') && !lower.includes('toge') && !lower.includes('sayur') && !lower.includes('sop') && !lower.includes('sup') && !lower.includes('buncis')
+      ) {
+        result['Lauk Nabati'] = result['Lauk Nabati'] ? `${result['Lauk Nabati']}, ${part}` : part;
+      } 
+      // 5. Sayuran
+      else if (
+        lower.includes('bayam') || lower.includes('sayur') || lower.includes('sop') || lower.includes('sup') || 
+        lower.includes('kol') || lower.includes('kobis') || lower.includes('kangkung') || lower.includes('wortel') || 
+        lower.includes('sawi') || lower.includes('selada') || lower.includes('tumis') || lower.includes('timun') || 
+        lower.includes('mentimun') || lower.includes('terong') || lower.includes('kembang kol') || lower.includes('bung') || 
+        lower.includes('capcay') || lower.includes('cap cai') || lower.includes('ca ') || lower.startsWith('ca ') ||
+        lower.includes('oseng') || lower.includes('lodeh') || lower.includes('bening') || lower.includes('bobor') || 
+        lower.includes('urap') || lower.includes('pecel') || lower.includes('gado') || lower.includes('lalap') || 
+        lower.includes('acar') || lower.includes('labu') || lower.includes('buncis') || lower.includes('oyong') || 
+        lower.includes('gambas') || lower.includes('brokoli') || lower.includes('brocoli') || lower.includes('pare') || 
+        lower.includes('rebung') || lower.includes('kemangi') || lower.includes('pakcoy') || lower.includes('pokcoy') || 
+        lower.includes('caisim') || lower.includes('tauge') || lower.includes('toge') || lower.includes('kimlo') || 
+        lower.includes('soto') || lower.includes('tomat') || lower.includes('seledri') || lower.includes('jamur')
+      ) {
+        result['Sayuran'] = result['Sayuran'] ? `${result['Sayuran']}, ${part}` : part;
+      } 
+      // 6. Buah & Dessert
+      else if (
+        lower.includes('pisang') || lower.includes('pepaya') || lower.includes('semangka') || 
+        lower.includes('melon') || lower.includes('jeruk') || lower.includes('apel') || 
+        lower.includes('mangga') || lower.includes('alpukat') || lower.includes('anggur') || 
+        lower.includes('pir') || lower.includes('pear') || lower.includes('puding') || 
+        lower.includes('pudding') || lower.includes('agar') || lower.includes('nanas') || 
+        lower.includes('salak') || lower.includes('sawo') || lower.includes('susu') || lower.includes('buah')
+      ) {
         result['Buah'] = result['Buah'] ? `${result['Buah']}, ${part}` : part;
+      } 
+      // 7. Fallback if unmatched
+      else {
+        if (!result['Sayuran']) {
+          result['Sayuran'] = part;
+        } else if (!result['Buah']) {
+          result['Buah'] = part;
+        } else {
+          result['Sayuran'] = `${result['Sayuran']}, ${part}`;
+        }
       }
     });
 
@@ -141,12 +206,13 @@ export default function RecordWaste() {
   // Auto-set menu items based on cycleDay and mealTime
   useEffect(() => {
     const matchingMenu = menus.find(m => m.cycleDay === cycleDay && m.mealTime === mealTime);
-    if (matchingMenu) {
+    if (matchingMenu && matchingMenu.foodItems) {
       setMenuId(matchingMenu.id);
       setFoodItems(matchingMenu.foodItems);
     } else {
       setMenuId('');
-      setFoodItems('');
+      const defaultVal = DEFAULT_CYCLE_DATA[cycleDay]?.[mealTime] || '';
+      setFoodItems(defaultVal);
     }
   }, [cycleDay, mealTime, menus]);
 
@@ -432,25 +498,6 @@ export default function RecordWaste() {
                       placeholder="Cth: Ruang Melati / 102"
                       className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
                     />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Ruang Rawat / Unit</label>
-                    <input
-                      type="text"
-                      list="ward-list"
-                      value={wardName}
-                      onChange={(e) => handleWardChange(e.target.value)}
-                      placeholder="Ketik atau pilih nama ruang rawat..."
-                      className="w-full px-4 py-3.5 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
-                    />
-                    <datalist id="ward-list">
-                      {wards.map(w => (
-                        <option key={w.id} value={w.name} />
-                      ))}
-                    </datalist>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Petugas PJ Ruangan</label>

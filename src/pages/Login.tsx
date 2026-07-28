@@ -1,80 +1,19 @@
-import { signInWithEmailAndPassword, sendPasswordResetEmail, createUserWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
-import { auth, db } from '../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth } from '../lib/firebase';
 import { motion } from 'motion/react';
 import { useState } from 'react';
-import { AlertCircle, LogIn, Fingerprint, MailCheck, ShieldAlert, User, Sparkles } from 'lucide-react';
+import { AlertCircle, LogIn, Fingerprint, MailCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Role } from '../types';
 // @ts-ignore
 import nutriwasteLogo from '../assets/images/nutriwaste_logo_1782572222694.jpg';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState<Role>('nutritionist');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
-
-  const handleInstantLogin = async (role: Role) => {
-    setIsLoading(true);
-    setError(null);
-    setResetMessage(null);
-    setSelectedRole(role);
-    const demoEmail = role === 'admin' ? 'admin.demo@rsud.com' : 'petugas.demo@rsud.com';
-    const demoPassword = 'password123';
-
-    try {
-      // Try to sign in
-      const userCredential = await signInWithEmailAndPassword(auth, demoEmail, demoPassword);
-      const user = userCredential.user;
-      
-      // Ensure profile exists in Firestore with role and name to bypass CompleteProfile screen
-      const docRef = doc(db, 'users', user.uid);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists() || !docSnap.data().name) {
-        await setDoc(docRef, {
-          email: demoEmail,
-          role: role,
-          name: role === 'admin' ? 'Dr. Nabila (Admin Demo)' : 'Faza, S.Gz (Petugas Gizi Demo)',
-          nip: role === 'admin' ? '199001012015011001' : '199505052020022002',
-          assignedWardId: 'ward_all',
-          createdAt: serverTimestamp(),
-        }, { merge: true });
-      }
-    } catch (err: any) {
-      // If user does not exist or password mismatch, create the user
-      if (
-        err.code === 'auth/user-not-found' || 
-        err.code === 'auth/wrong-password' || 
-        err.code === 'auth/invalid-credential' || 
-        err.code === 'auth/invalid-login-credentials'
-      ) {
-        try {
-          const usrCred = await createUserWithEmailAndPassword(auth, demoEmail, demoPassword);
-          const user = usrCred.user;
-          await setDoc(doc(db, 'users', user.uid), {
-            email: demoEmail,
-            role: role,
-            name: role === 'admin' ? 'Dr. Nabila (Admin Demo)' : 'Faza, S.Gz (Petugas Gizi Demo)',
-            nip: role === 'admin' ? '199001012015011001' : '199505052020022002',
-            assignedWardId: 'ward_all',
-            createdAt: serverTimestamp(),
-          });
-        } catch (innerErr: any) {
-          console.error('Simulasi Register gagal:', innerErr);
-          setError('Gagal membuat akun simulasi: ' + innerErr.message);
-        }
-      } else {
-        console.error('Simulasi Login gagal:', err);
-        setError('Gagal masuk simulasi: ' + err.message);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,23 +22,7 @@ export default function Login() {
     setResetMessage(null);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // Verify role matches selection before letting them enter
-      const isDeveloperEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(user.email || '');
-      const docRef = doc(db, 'users', user.uid);
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists() && !isDeveloperEmail) {
-        const storedRole = docSnap.data().role as Role;
-        if (storedRole !== selectedRole) {
-          await auth.signOut();
-          setError(`Akun Anda terdaftar sebagai ${storedRole === 'admin' ? 'ADMIN' : 'PETUGAS GIZI'}. Silakan sesuaikan pilihan jabatan di atas sebelum Masuk.`);
-          setIsLoading(false);
-          return;
-        }
-      }
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (err) {
       console.error('Login error details:', err);
       if (err instanceof FirebaseError) {
@@ -189,33 +112,6 @@ export default function Login() {
         )}
 
         <form onSubmit={handleLogin} className="space-y-4 text-left">
-          {/* Role Selection */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Pilih Jabatan Masuk</label>
-            <div className="grid grid-cols-2 gap-3 bg-slate-100 p-1 rounded-2xl h-[58px]">
-              <button
-                type="button"
-                onClick={() => handleInstantLogin('admin')}
-                className={`flex items-center justify-center gap-1.5 text-xs font-black rounded-xl transition-all ${selectedRole === 'admin' ? 'bg-white text-emerald-600 shadow-sm font-bold' : 'text-slate-400 hover:text-slate-600'}`}
-              >
-                <ShieldAlert size={14} />
-                ADMIN
-              </button>
-              <button
-                type="button"
-                onClick={() => handleInstantLogin('nutritionist')}
-                className={`flex items-center justify-center gap-1.5 text-xs font-black rounded-xl transition-all ${selectedRole === 'nutritionist' ? 'bg-white text-emerald-600 shadow-sm font-bold' : 'text-slate-400 hover:text-slate-600'}`}
-              >
-                <User size={14} />
-                PETUGAS GIZI
-              </button>
-            </div>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1 px-1 flex items-center gap-1">
-              <Sparkles size={11} className="shrink-0 text-emerald-500" />
-              Klik pilihan jabatan di atas untuk masuk secara otomatis tanpa password (simulasi)
-            </p>
-          </div>
-
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Email RSUD</label>
             <div className="relative">

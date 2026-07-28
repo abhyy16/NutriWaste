@@ -74,8 +74,8 @@ export default function Profile() {
     e.preventDefault();
     if (!user) return;
     
-    if (!name || !nip || !wardId) {
-      setError('Mohon lengkapi semua data profil.');
+    if (!name || !wardId) {
+      setError('Mohon isi nama dan unit/bangsal tugas Anda.');
       return;
     }
 
@@ -242,7 +242,9 @@ export default function Profile() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">NIP / ID</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                    NIP / ID <span className="text-slate-400 font-normal lowercase">(opsional)</span>
+                  </label>
                   <div className="relative">
                     <input
                       type="text"

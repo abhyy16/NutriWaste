@@ -19,50 +19,7 @@ import {
   Info 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-
-const MEAL_TIMES = [
-  { id: 'sarapan', label: 'Sarapan' },
-  { id: 'makan_siang', label: 'Makan Siang' },
-  { id: 'makan_malam', label: 'Makan Malam' }
-];
-
-const DEFAULT_CYCLE_DATA: Record<number, Record<string, string>> = {
-  1: {
-    sarapan: 'Nasi, Hati ayam, tempe, susu',
-    makan_siang: 'Nasi, daging sapi, kangkung, alpukat, susu',
-    makan_malam: 'Nasi goreng, hati ayam, telur ayam, pisang ambon'
-  },
-  2: {
-    sarapan: 'Nasi, ikan nila, tahu, apel',
-    makan_siang: 'Nasi, ikan teri, bayam, wortel, pisang ambon',
-    makan_malam: 'Nasi, telur ayam, tempe, mangga'
-  },
-  3: {
-    sarapan: 'Nasi, tempe, ayam, apel',
-    makan_siang: 'Nasi, ayam, sawi hijau, wortel, kembang kol',
-    makan_malam: 'Nasi, bandeng, tahu, tauge, semangka'
-  },
-  4: {
-    sarapan: 'Nasi goreng, ayam, mangga',
-    makan_siang: 'Nasi, nila, tempe, kacang panjang',
-    makan_malam: 'Nasi, daging sapi, tahu, selada'
-  },
-  5: {
-    sarapan: 'Nasi, ayam, hati ayam, kol, pepaya',
-    makan_siang: 'Nasi, udang, sawi, pisang ambon',
-    makan_malam: 'Nasi, hati ayam, kentang, wortel, kol, apel'
-  },
-  6: {
-    sarapan: 'Nasi, otak-otak ikan, bayam, sawi, wortel, pisang ambon',
-    makan_siang: 'Nasi, udang, daun singkong, timun, apel',
-    makan_malam: 'Nasi, ayam, terong, kacang panjang, santan'
-  },
-  7: {
-    sarapan: 'Nasi, udang, selada, apel',
-    makan_siang: 'Nasi, telur, hati ayam, pisang ambon',
-    makan_malam: 'Nasi goreng, sosis, ayam, udang, telur ayam, pepaya'
-  }
-};
+import { MEAL_TIMES, DEFAULT_CYCLE_DATA } from '../constants/menuCycle';
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo = {

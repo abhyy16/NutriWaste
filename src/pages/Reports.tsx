@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, getDocs, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Transaction, Menu, Ward } from '../types';
+import { Transaction, Menu, Ward, COMSTOCK_VALUES, MealTime } from '../types';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search, X, Info, FileText, Activity, ShieldCheck, ChevronDown, ChevronUp, Pencil, Edit3, Save, CheckCircle2, Trash2, AlertTriangle, Eye, FileSpreadsheet, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -9,6 +9,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
+import { calculateCumulativeWasteFromRecaps, calculateCumulativeWasteFromTransactions } from '../lib/recap';
 
 interface BarChartItem {
   label: string;
@@ -125,6 +126,8 @@ export default function Reports() {
     dietType: string;
   } | null>(null);
   const [savingPatient, setSavingPatient] = useState(false);
+  const [editingSingleTx, setEditingSingleTx] = useState<Transaction | null>(null);
+  const [savingSingleTx, setSavingSingleTx] = useState(false);
 
   // Preview Modals State
   const [previewPdfModal, setPreviewPdfModal] = useState<{
@@ -454,6 +457,8 @@ export default function Reports() {
     };
   });
 
+  const { overallWastePercentage, totalCumulativeWaste, totalPatients } = calculateCumulativeWasteFromRecaps(patientRecaps);
+
   const handleSavePatientEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPatient) return;
@@ -502,6 +507,48 @@ export default function Reports() {
       console.error("Gagal memperbarui data pasien:", err);
     } finally {
       setSavingPatient(false);
+    }
+  };
+
+  const handleSaveSingleTxEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSingleTx) return;
+
+    setSavingSingleTx(true);
+    try {
+      const scaleObj = COMSTOCK_VALUES.find(v => v.scale === editingSingleTx.comstockScale);
+      const stdW = (editingSingleTx.wasteWeight + editingSingleTx.consumptionWeight) || 400;
+      const wasteWeight = scaleObj ? (stdW * (scaleObj.percentage / 100)) : editingSingleTx.wasteWeight;
+      const consumptionWeight = stdW - wasteWeight;
+
+      const txRef = doc(db, 'transactions', editingSingleTx.id);
+      await updateDoc(txRef, {
+        medicalRecordNumber: editingSingleTx.medicalRecordNumber || null,
+        patientName: editingSingleTx.patientName,
+        patientGender: editingSingleTx.patientGender || 'L',
+        patientAge: Number(editingSingleTx.patientAge) || 0,
+        wardName: editingSingleTx.wardName || 'Rawat Inap',
+        roomNumber: editingSingleTx.roomNumber || null,
+        dietType: editingSingleTx.dietType || 'Biasa',
+        mealTime: editingSingleTx.mealTime || 'makan_siang',
+        foodType: editingSingleTx.foodType || 'Makanan Pokok',
+        comstockScale: editingSingleTx.comstockScale,
+        wasteWeight,
+        consumptionWeight,
+        reason: editingSingleTx.reason || null
+      });
+
+      setTransactions(prev => prev.map(t => t.id === editingSingleTx.id ? {
+        ...editingSingleTx,
+        wasteWeight,
+        consumptionWeight
+      } : t));
+
+      setEditingSingleTx(null);
+    } catch (err) {
+      console.error("Gagal memperbarui catatan transaksi:", err);
+    } finally {
+      setSavingSingleTx(false);
     }
   };
 
@@ -589,6 +636,25 @@ export default function Reports() {
       'Status Efisiensi': pr.wastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
     }));
 
+    if (patientRecaps.length > 0) {
+      data.push({
+        'No. Rekam Medis': 'REKAPITULASI',
+        'Nama Pasien': `RATA-RATA KUMULATIF (${totalPatients} PASIEN)`,
+        'JK': '-',
+        'Umur': 0,
+        'Ruang Rawat / Unit': '-',
+        'No. Kamar': '-',
+        'Jenis Diet': '-',
+        'Jumlah Asesmen': totalPatients,
+        'Sisa Pagi (%)': '-',
+        'Sisa Siang (%)': '-',
+        'Sisa Malam (%)': '-',
+        'Rata-rata Total (%)': `${overallWastePercentage.toFixed(1)}%`,
+        'Sisa <= 25%': overallWastePercentage <= 25 ? 'Ya' : 'Tidak',
+        'Status Efisiensi': overallWastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
+      });
+    }
+
     const filename = `Rekapitulasi_Sisa_Makan_Pasien_${selectedMonth}.xlsx`;
     openExcelPreview(data, filename, 'Rekapitulasi Pasien', 'Rekapitulasi Sisa Makanan Pasien');
   };
@@ -615,11 +681,16 @@ export default function Reports() {
     const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 25).length;
 
     doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(16, 185, 129);
+    doc.text(`Rata-rata Rekapitulasi Kumulatif: ${overallWastePercentage.toFixed(1)}% (Total Kumulatif / ${totalPatients} Pasien)`, 14, 28);
+
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(71, 85, 105);
-    doc.text(`Total Pasien Ter-observasi: ${patientRecaps.length} Pasien | Sisa <= 25%: ${efficientCount} | Sisa > 25%: ${highWasteCount}`, 14, 28);
+    doc.text(`Total Pasien Ter-observasi: ${patientRecaps.length} Pasien | Sisa <= 25%: ${efficientCount} | Sisa > 25%: ${highWasteCount}`, 14, 32);
 
-    const recapTableData = patientRecaps.map((pr, index) => [
+    const recapTableData: any[] = patientRecaps.map((pr, index) => [
       index + 1,
       pr.medicalRecordNumber,
       `${pr.patientName} (${pr.patientGender})`,
@@ -634,8 +705,25 @@ export default function Reports() {
       pr.wastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
     ]);
 
+    if (patientRecaps.length > 0) {
+      recapTableData.push([
+        '',
+        'REKAPITULASI',
+        `RATA-RATA KUMULATIF (${totalPatients} PASIEN)`,
+        '-',
+        '-',
+        '-',
+        '-',
+        '-',
+        '-',
+        `${overallWastePercentage.toFixed(1)}%`,
+        overallWastePercentage <= 25 ? 'Ya' : 'Tidak',
+        overallWastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
+      ]);
+    }
+
     autoTable(doc, {
-      startY: 33,
+      startY: 36,
       head: [
         [
           'No.',
@@ -723,10 +811,8 @@ export default function Reports() {
 
   const wasteByFoodType = foodTypes.map(fType => {
     const matchingTxs = getFilteredForChart('foodType').filter(t => (t.foodType || 'Makanan Pokok') === fType);
-    const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
-    const totalServed = matchingTxs.reduce((sum, t) => sum + (t.wasteWeight + t.consumptionWeight), 0);
-    const percentage = totalServed > 0 ? (totalWaste / totalServed) * 100 : 0;
-    return { label: fType, percentage: Math.min(percentage, 100), count: matchingTxs.length };
+    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(matchingTxs);
+    return { label: fType, percentage: Math.min(overallWastePercentage, 100), count: matchingTxs.length };
   });
 
   const activeFoodTypes = wasteByFoodType.filter(item => item.count > 0);
@@ -741,10 +827,8 @@ export default function Reports() {
 
   const wasteByMealTime = mealTimesList.map(mt => {
     const matchingTxs = getFilteredForChart('mealTime').filter(t => t.mealTime === mt.value);
-    const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
-    const totalServed = matchingTxs.reduce((sum, t) => sum + (t.wasteWeight + t.consumptionWeight), 0);
-    const percentage = totalServed > 0 ? (totalWaste / totalServed) * 100 : 0;
-    return { label: mt.label, percentage: Math.min(percentage, 100), count: matchingTxs.length };
+    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(matchingTxs);
+    return { label: mt.label, percentage: Math.min(overallWastePercentage, 100), count: matchingTxs.length };
   });
 
   const activeMealTimes = wasteByMealTime.filter(item => item.count > 0);
@@ -766,10 +850,8 @@ export default function Reports() {
       const tDay = t.timestamp ? t.timestamp.getDay() : -1;
       return tDay === d.value;
     });
-    const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
-    const totalServed = matchingTxs.reduce((sum, t) => sum + (t.wasteWeight + t.consumptionWeight), 0);
-    const percentage = totalServed > 0 ? (totalWaste / totalServed) * 100 : 0;
-    return { label: d.label, percentage: Math.min(percentage, 100), count: matchingTxs.length };
+    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(matchingTxs);
+    return { label: d.label, percentage: Math.min(overallWastePercentage, 100), count: matchingTxs.length };
   });
 
   const activeDays = wasteByDay.filter(item => item.count > 0);
@@ -781,10 +863,8 @@ export default function Reports() {
   const wasteByCycle = cycleDays.map(cd => {
     const matchingMenuIds = menus.filter(m => m.cycleDay === cd).map(m => m.id);
     const matchingTxs = getFilteredForChart('cycleDay').filter(t => matchingMenuIds.includes(t.menuId));
-    const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
-    const totalServed = matchingTxs.reduce((sum, t) => sum + (t.wasteWeight + t.consumptionWeight), 0);
-    const percentage = totalServed > 0 ? (totalWaste / totalServed) * 100 : 0;
-    return { label: `Hari ${cd}`, percentage: Math.min(percentage, 100), count: matchingTxs.length };
+    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(matchingTxs);
+    return { label: `Hari ${cd}`, percentage: Math.min(overallWastePercentage, 100), count: matchingTxs.length };
   });
 
   const activeCycles = wasteByCycle.filter(item => item.count > 0);
@@ -1040,36 +1120,59 @@ export default function Reports() {
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-4">
-          <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl">
-            <HardDrive size={24} />
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-4 shadow-sm">
+          <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+            <Activity size={24} />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Record</p>
-            <p className="text-2xl font-black text-slate-900">{filteredTransactions.length}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rekapitulasi Sisa Makanan</p>
+            <p className="text-2xl font-black text-emerald-600 font-mono">{overallWastePercentage.toFixed(1)}%</p>
+            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">(Total Kumulatif / Pasien)</p>
           </div>
         </div>
 
-        <div className="md:col-span-2 grid grid-cols-2 gap-3 items-center">
-           <button 
-             onClick={exportToExcel}
-             disabled={filteredTransactions.length === 0}
-             className="flex items-center justify-center gap-2 px-4 py-4 bg-white border border-emerald-200 text-emerald-800 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-md disabled:opacity-50 disabled:shadow-none text-xs sm:text-sm cursor-pointer"
-             title="Pratinjau data spreadsheet Excel sebelum diunduh"
-           >
-             <FileSpreadsheet size={18} className="text-emerald-600" />
-             <span>Pratinjau & Unduh Excel</span>
-           </button>
-           <button 
-             onClick={exportToPDF}
-             disabled={filteredTransactions.length === 0}
-             className="flex items-center justify-center gap-2 px-4 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-950/20 disabled:opacity-50 disabled:shadow-none text-xs sm:text-sm cursor-pointer"
-             title="Pratinjau dokumen PDF sebelum diunduh"
-           >
-             <FileText size={18} />
-             <span>Pratinjau & Unduh PDF</span>
-           </button>
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-4 shadow-sm">
+          <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100">
+            <User size={24} />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Jumlah Pasien</p>
+            <p className="text-2xl font-black text-slate-900 font-mono">{totalPatients}</p>
+            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Pasien Ter-observasi</p>
+          </div>
         </div>
+
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center gap-4 shadow-sm">
+          <div className="p-4 bg-purple-50 text-purple-600 rounded-2xl border border-purple-100">
+            <HardDrive size={24} />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Transaksi</p>
+            <p className="text-2xl font-black text-slate-900 font-mono">{filteredTransactions.length}</p>
+            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Entri Data</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+         <button 
+           onClick={exportToExcel}
+           disabled={filteredTransactions.length === 0}
+           className="flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-emerald-200 text-emerald-800 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-sm disabled:opacity-50 disabled:shadow-none text-xs sm:text-sm cursor-pointer"
+           title="Pratinjau data spreadsheet Excel sebelum diunduh"
+         >
+           <FileSpreadsheet size={18} className="text-emerald-600" />
+           <span>Pratinjau & Unduh Excel</span>
+         </button>
+         <button 
+           onClick={exportToPDF}
+           disabled={filteredTransactions.length === 0}
+           className="flex items-center justify-center gap-2 px-4 py-3.5 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-950/20 disabled:opacity-50 disabled:shadow-none text-xs sm:text-sm cursor-pointer"
+           title="Pratinjau dokumen PDF sebelum diunduh"
+         >
+           <FileText size={18} />
+           <span>Pratinjau & Unduh PDF</span>
+         </button>
       </div>
 
       {/* Search & Filter Section */}
@@ -1412,6 +1515,32 @@ export default function Reports() {
                   })
                 )}
               </tbody>
+              <tfoot>
+                <tr className="bg-emerald-50/80 border-t-2 border-emerald-300 text-slate-800">
+                  <td colSpan={6} className="px-6 py-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <span className="font-display font-black uppercase text-xs tracking-wider text-emerald-950">
+                        REKAPITULASI KUMULATIF SISA MAKANAN:
+                      </span>
+                      <span className="text-xs text-emerald-800 font-semibold">
+                        (Total Kumulatif: {totalCumulativeWaste.toFixed(1)}% / {totalPatients} Pasien)
+                      </span>
+                    </div>
+                  </td>
+                  <td colSpan={2} className="px-4 py-4 text-center font-mono font-black text-base text-emerald-700">
+                    {overallWastePercentage.toFixed(1)}%
+                  </td>
+                  <td colSpan={2} className="px-6 py-4 text-center">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      overallWastePercentage > 25 
+                        ? 'bg-rose-100 text-rose-700 border border-rose-300' 
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    }`}>
+                      {overallWastePercentage > 25 ? 'Sisa Tinggi (>25%)' : 'Efisien (≤25%)'}
+                    </span>
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         ) : (
@@ -1489,14 +1618,24 @@ export default function Reports() {
                           })()}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteSingleTx(t.id)}
-                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-slate-200"
-                            title="Hapus Transaksi Ini"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditingSingleTx(t)}
+                              className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition border border-slate-200 cursor-pointer"
+                              title="Edit Catatan Sisa Makanan Ini"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSingleTx(t.id)}
+                              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-slate-200 cursor-pointer"
+                              title="Hapus Transaksi Ini"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1632,6 +1771,212 @@ export default function Reports() {
                 >
                   <Save size={14} />
                   <span>{savingPatient ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Single Transaction Edit Modal */}
+      {editingSingleTx && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 15 }}
+            className="bg-white rounded-[2.5rem] border border-slate-200 w-full max-w-xl overflow-hidden shadow-2xl relative flex flex-col my-6"
+          >
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-8 py-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/10 rounded-2xl">
+                  <Pencil size={22} className="text-white" />
+                </div>
+                <div>
+                  <h4 className="font-display font-black text-lg">Edit Catatan Sisa Makanan</h4>
+                  <p className="text-xs text-emerald-100">Perbarui data skala Comstock dan rincian transaksi</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setEditingSingleTx(null)}
+                className="p-2 hover:bg-white/10 rounded-xl transition cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSingleTxEdit} className="p-8 space-y-5 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">No. Rekam Medis</label>
+                  <input 
+                    type="text"
+                    value={editingSingleTx.medicalRecordNumber || ''}
+                    onChange={e => setEditingSingleTx({...editingSingleTx, medicalRecordNumber: e.target.value})}
+                    placeholder="RM-XXXXXX"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Nama Pasien</label>
+                  <input 
+                    type="text"
+                    value={editingSingleTx.patientName}
+                    onChange={e => setEditingSingleTx({...editingSingleTx, patientName: e.target.value})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Umur (Thn)</label>
+                  <input 
+                    type="number"
+                    value={editingSingleTx.patientAge || ''}
+                    onChange={e => setEditingSingleTx({...editingSingleTx, patientAge: Number(e.target.value)})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Jenis Kelamin</label>
+                  <div className="flex bg-slate-100 p-1 rounded-xl h-[46px]">
+                    {(['L', 'P'] as const).map(g => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setEditingSingleTx({...editingSingleTx, patientGender: g})}
+                        className={`flex-1 flex items-center justify-center text-xs font-black rounded-lg transition-all ${editingSingleTx.patientGender === g ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}
+                      >
+                        {g === 'L' ? 'LAKI-LAKI' : 'PEREMPUAN'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Ruang Rawat / Unit</label>
+                  <input 
+                    type="text"
+                    value={editingSingleTx.wardName || ''}
+                    onChange={e => setEditingSingleTx({...editingSingleTx, wardName: e.target.value})}
+                    placeholder="misal: Mawar"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">No. Kamar</label>
+                  <input 
+                    type="text"
+                    value={editingSingleTx.roomNumber || ''}
+                    onChange={e => setEditingSingleTx({...editingSingleTx, roomNumber: e.target.value})}
+                    placeholder="misal: 102A"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Jenis Diet</label>
+                  <input 
+                    type="text"
+                    value={editingSingleTx.dietType || 'Biasa'}
+                    onChange={e => setEditingSingleTx({...editingSingleTx, dietType: e.target.value})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Waktu Makan</label>
+                  <select
+                    value={editingSingleTx.mealTime || 'makan_siang'}
+                    onChange={e => setEditingSingleTx({...editingSingleTx, mealTime: e.target.value as MealTime})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                  >
+                    <option value="sarapan">Sarapan</option>
+                    <option value="makan_siang">Makan Siang</option>
+                    <option value="makan_malam">Makan Malam</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase">Jenis Makanan</label>
+                <select
+                  value={editingSingleTx.foodType || 'Makanan Pokok'}
+                  onChange={e => setEditingSingleTx({...editingSingleTx, foodType: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                >
+                  <option value="Makanan Pokok">Makanan Pokok</option>
+                  <option value="Lauk Hewani">Lauk Hewani</option>
+                  <option value="Lauk Nabati">Lauk Nabati</option>
+                  <option value="Sayuran">Sayuran</option>
+                  <option value="Buah/Lainnya">Buah/Lainnya</option>
+                </select>
+              </div>
+
+              {/* Comstock Scale Selection */}
+              <div className="space-y-2 pt-1">
+                <label className="text-xs font-bold text-slate-500 uppercase block">Skala Comstock (Persentase Sisa)</label>
+                <div className="grid grid-cols-6 gap-2">
+                  {COMSTOCK_VALUES.map(v => {
+                    const isSelected = editingSingleTx.comstockScale === v.scale;
+                    return (
+                      <button
+                        key={v.scale}
+                        type="button"
+                        onClick={() => setEditingSingleTx({...editingSingleTx, comstockScale: v.scale})}
+                        className={`p-2.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-105 font-black'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 font-bold'
+                        }`}
+                      >
+                        <span className="text-xs">{v.scale}</span>
+                        <span className={`text-[9px] mt-0.5 ${isSelected ? 'text-emerald-100' : 'text-slate-400'}`}>
+                          {v.percentage}%
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase">Alasan Sisa Makan</label>
+                <select 
+                  value={editingSingleTx.reason || ''}
+                  onChange={e => setEditingSingleTx({...editingSingleTx, reason: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-200"
+                >
+                  <option value="">-- Tanpa Alasan --</option>
+                  <option value="Pasien tidak nafsu makan">Pasien tidak nafsu makan</option>
+                  <option value="Porsi terlalu besar">Porsi terlalu besar</option>
+                  <option value="Pasien pulang/tindakan medis">Pasien pulang/tindakan medis</option>
+                  <option value="Makanan dingin">Makanan dingin</option>
+                  <option value="Sensori / Rasa kurang cocok">Sensori / Rasa kurang cocok</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingSingleTx(null)}
+                  className="px-5 py-3 bg-slate-100 hover:bg-slate-200 transition rounded-xl font-bold text-slate-600 text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingSingleTx}
+                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 transition rounded-xl font-bold text-white text-xs flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <Save size={14} />
+                  <span>{savingSingleTx ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
                 </button>
               </div>
             </form>

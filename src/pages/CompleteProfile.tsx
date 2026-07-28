@@ -72,8 +72,8 @@ export default function CompleteProfile() {
     e.preventDefault();
     if (!user) return;
     
-    if (!name || !nip || !wardId) {
-      setError('Mohon lengkapi semua data profil Anda.');
+    if (!name || !wardId) {
+      setError('Mohon isi nama dan pilih unit/bangsal tugas Anda.');
       return;
     }
 
@@ -211,7 +211,9 @@ export default function CompleteProfile() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">NIP / ID Petugas</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                NIP / ID Petugas <span className="text-slate-400 font-normal lowercase">(opsional)</span>
+              </label>
               <div className="relative">
                 <input
                   type="text"

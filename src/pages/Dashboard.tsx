@@ -9,12 +9,14 @@ import {
 import { 
   TrendingUp, Users, Utensils, AlertTriangle, Download, 
   Filter, Calendar, ChevronRight, Building2, Clock, User,
-  Trash2, Pencil, X, Save, AlertCircle
+  Trash2, Pencil, X, Save, AlertCircle, Info, HelpCircle,
+  Search, RefreshCw, FileText, Database, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { calculateCumulativeWasteFromTransactions, getTransactionWastePercentage } from '../lib/recap';
 
 export default function Dashboard() {
   const { profile } = useAuth();
@@ -27,6 +29,28 @@ export default function Dashboard() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [selectedWard, setSelectedWard] = useState<string>('all');
+  const [showAllHistoryModal, setShowAllHistoryModal] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
+
+  const handleClearAllData = async () => {
+    try {
+      setIsClearing(true);
+      setError(null);
+      const snap = await getDocs(collection(db, 'transactions'));
+      const deletePromises = snap.docs.map(d => deleteDoc(doc(db, 'transactions', d.id)));
+      await Promise.all(deletePromises);
+      setTransactions([]);
+      setShowClearConfirm(false);
+      setIsClearing(false);
+    } catch (err: any) {
+      setError(err.message || 'Gagal mengosongkan data transaksi.');
+      setIsClearing(false);
+      handleFirestoreError(err, OperationType.DELETE, 'transactions');
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -127,16 +151,11 @@ export default function Dashboard() {
     }
   };
 
-  // Logical Helpers
+  // Logical Helpers - Perhitungan Rekapitulasi Sisa Makanan Pasien
   const displayedTransactions = transactions.filter(t => (selectedWard === 'all' || t.wardId === selectedWard) && t.foodType !== 'Semua (Komposit)');
 
-  const avgWaste = displayedTransactions.length > 0 
-    ? (displayedTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0) / displayedTransactions.reduce((acc, curr) => {
-        return acc + (curr.wasteWeight + curr.consumptionWeight); 
-      }, 0)) * 100 
-    : 0;
-
-  const totalPatients = new Set(displayedTransactions.map(t => t.patientName)).size;
+  // Rekapitulasi (%) = (Total Kumulatif Sisa Makanan Pasien / Jumlah Pasien)
+  const { overallWastePercentage: avgWaste, totalPatients } = calculateCumulativeWasteFromTransactions(displayedTransactions);
 
   // Chart Data: Waste by Day (Last 7 Days)
   const last7DaysData = Array.from({ length: 7 }).map((_, i) => {
@@ -145,12 +164,11 @@ export default function Dashboard() {
       t.timestamp && format(t.timestamp, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
     );
     
-    const totalWaste = dayTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-    const totalServed = dayTransactions.reduce((acc, curr) => acc + (curr.wasteWeight + curr.consumptionWeight), 0);
+    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(dayTransactions);
 
     return {
       name: format(date, 'EEE'),
-      percentage: totalServed > 0 ? (totalWaste / totalServed) * 100 : 0
+      percentage: Number(overallWastePercentage.toFixed(1))
     };
   }).reverse();
 
@@ -158,12 +176,11 @@ export default function Dashboard() {
   const mealTimes = ['sarapan', 'makan_siang', 'makan_malam'];
   const mealTimeData = mealTimes.map(m => {
     const mtTransactions = displayedTransactions.filter(t => t.mealTime === m);
-    const totalWaste = mtTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-    const totalServed = mtTransactions.reduce((acc, curr) => acc + (curr.wasteWeight + curr.consumptionWeight), 0);
+    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(mtTransactions);
 
     return {
       name: m.replace('_', ' ').toUpperCase(),
-      value: totalServed > 0 ? Number(((totalWaste / totalServed) * 100).toFixed(1)) : 0
+      value: Number(overallWastePercentage.toFixed(1))
     };
   });
 
@@ -178,21 +195,19 @@ export default function Dashboard() {
 
   const foodTypeData = foodTypesList.map(fType => {
     const fTransactions = displayedTransactions.filter(t => (t.foodType || 'Makanan Pokok') === fType);
-    const totalWaste = fTransactions.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-    const totalServed = fTransactions.reduce((acc, curr) => acc + (curr.wasteWeight + curr.consumptionWeight), 0);
+    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(fTransactions);
 
     return {
       name: fType,
-      value: totalServed > 0 ? Number(((totalWaste / totalServed) * 100).toFixed(1)) : 0,
+      value: Number(overallWastePercentage.toFixed(1)),
       count: fTransactions.length
     };
   });
 
-  // Alarms: Transactions with > 25% waste (Simplified as menus are cyclical now)
+  // Alarms: Transactions with > 25% waste using synchronized percentage
   const menuAlerts = displayedTransactions.filter(t => {
-     const scale = COMSTOCK_VALUES.find(v => v.scale === t.comstockScale);
-     return scale && scale.percentage > 25;
-  }).slice(0, 5);
+     return getTransactionWastePercentage(t) > 25;
+  });
 
   const COLORS = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#ecfdf5'];
 
@@ -286,6 +301,14 @@ export default function Dashboard() {
           >
             <Download size={16} /> Ekspor Laporan
           </Link>
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-sm font-semibold transition-all shadow-sm cursor-pointer"
+            title="Kosongkan seluruh data transaksi"
+          >
+            <Trash2 size={16} />
+            <span className="hidden sm:inline">Kosongkan Data</span>
+          </button>
         </div>
       </header>
 
@@ -384,89 +407,130 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Additional Admin Stats for Today */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm animate-fade-in">
-           <h3 className="font-bold text-slate-800 text-lg mb-6 flex items-center gap-2">
-             <Clock className="text-emerald-600" size={20} />
-             Ringkasan Hari Ini ({format(new Date(), 'dd MMM')})
-           </h3>
-           <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-              {mealTimes.map(mt => {
-                const todayTxs = displayedTransactions.filter(t => 
-                  t.mealTime === mt && 
-                  t.timestamp && 
-                  format(t.timestamp, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
-                );
-                
-                const wasteTotal = todayTxs.reduce((acc, curr) => acc + curr.wasteWeight, 0);
-                const servedTotal = todayTxs.length * 400;
-                const mtPercent = servedTotal > 0 ? (wasteTotal / servedTotal) * 100 : 0;
 
-                return (
-                  <div key={mt} className="p-2 bg-slate-50 rounded-xl border border-slate-100 flex flex-col items-center text-center">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter mb-1 truncate w-full">
-                      {(mt || '').replace('_', ' ')}
-                    </p>
-                    <p className={`text-sm font-black ${mtPercent > 25 ? 'text-red-500' : 'text-emerald-600'}`}>
-                      {mtPercent.toFixed(0)}%
-                    </p>
-                  </div>
-                );
-              })}
-           </div>
-        </div>
-
-        <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm animate-fade-in">
-           <h3 className="font-bold text-slate-800 text-lg mb-6 flex items-center gap-2">
-             <Utensils className="text-emerald-600" size={20} />
-             Waste per Jenis Makanan
-           </h3>
-           <div className="space-y-3">
-              {foodTypeData.map(item => {
-                 return (
-                   <div key={item.name} className="space-y-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-slate-600">{item.name} <span className="text-[9px] text-slate-400 font-normal">({item.count} entri)</span></span>
-                        <span className={item.value > 25 ? 'text-red-500' : 'text-emerald-600'}>{item.value.toFixed(1)}%</span>
-                      </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                         <div 
-                           className={`h-full rounded-full transition-all duration-500 ${item.value > 25 ? 'bg-red-500' : 'bg-emerald-500'}`}
-                           style={{ width: `${Math.min(item.value, 100)}%` }}
-                         />
-                      </div>
-                   </div>
-                 );
-              })}
-           </div>
-        </div>
-      </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Alerts Section */}
         <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm border-t-4 border-t-red-500">
-           <div className="flex items-center gap-3 mb-6">
-             <AlertTriangle className="text-red-500" />
-             <h3 className="font-bold text-slate-800 text-lg">Peringatan Waste {">"} 25%</h3>
+           <div className="flex items-center justify-between gap-3 mb-6">
+             <div className="flex items-center gap-3">
+               <div className="p-2.5 bg-red-100 text-red-600 rounded-xl">
+                 <AlertTriangle size={22} />
+               </div>
+               <div>
+                 <h3 className="font-bold text-slate-800 text-lg">Peringatan Waste (&gt; 25%)</h3>
+                 <p className="text-xs text-slate-500 font-medium">Berdasarkan indikator mutu pelayanan gizi Kemenkes RI (Standar sisa makanan ≤ 25%)</p>
+               </div>
+             </div>
+             <span className="px-3 py-1 bg-red-50 text-red-700 border border-red-200 rounded-full text-xs font-black">
+               {menuAlerts.length} Peringatan
+             </span>
            </div>
            
            <div className="space-y-4">
-             {menuAlerts.map(tx => (
-               <div key={tx.id} className="flex items-center justify-between p-4 bg-red-50 rounded-2xl">
-                 <div>
-                   <p className="font-bold text-red-900">{tx.patientName}</p>
-                   <p className="text-xs text-red-600 uppercase font-bold tracking-tight">{tx.dietType || 'Biasa'}</p>
+             {menuAlerts.map(tx => {
+               const wastePct = getTransactionWastePercentage(tx);
+               const isExpanded = expandedAlertId === tx.id;
+               const scaleObj = COMSTOCK_VALUES.find(v => v.scale === tx.comstockScale);
+               const ward = wards.find(w => w.id === tx.wardId);
+               const totalWeight = (tx.wasteWeight || 0) + (tx.consumptionWeight || 0) || 400;
+
+               return (
+                 <div key={tx.id} className="border border-red-100 bg-red-50/60 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:border-red-200">
+                   <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3">
+                     <div className="space-y-1 text-left">
+                       <div className="flex items-center gap-2 flex-wrap">
+                         <p className="font-bold text-red-950 text-base">{tx.patientName}</p>
+                         <span className="text-[10px] font-black text-red-700 bg-red-100 px-2 py-0.5 rounded-md uppercase">
+                           RM: {tx.medicalRecordNumber || '-'}
+                         </span>
+                         <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                           {tx.dietType || 'Biasa'}
+                         </span>
+                       </div>
+                       <p className="text-xs text-slate-600 font-medium">
+                         {tx.wardName || ward?.name || 'Rawat Inap'} {tx.roomNumber ? `• Kamar ${tx.roomNumber}` : ''} ({tx.foodType || 'Makanan Pokok'})
+                       </p>
+                     </div>
+
+                     <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                       <div className="text-right">
+                         <p className="text-xl font-black text-red-600 font-mono">{wastePct.toFixed(0)}%</p>
+                         <p className="text-[9px] font-bold text-red-500 uppercase tracking-tight">SISA MAKANAN</p>
+                       </div>
+                       <button
+                         onClick={() => setExpandedAlertId(isExpanded ? null : tx.id)}
+                         className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 text-red-700 rounded-xl text-xs font-bold hover:bg-red-100 transition-colors cursor-pointer shadow-sm"
+                       >
+                         <span>{isExpanded ? 'Tutup Detail' : 'Perhitungan & Sumber'}</span>
+                         {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                       </button>
+                     </div>
+                   </div>
+
+                   {/* Detailed calculation and explanation drawer */}
+                   <AnimatePresence>
+                     {isExpanded && (
+                       <motion.div
+                         initial={{ height: 0, opacity: 0 }}
+                         animate={{ height: 'auto', opacity: 1 }}
+                         exit={{ height: 0, opacity: 0 }}
+                         className="border-t border-red-200/80 bg-white p-4 space-y-3.5 text-xs text-slate-700 text-left"
+                       >
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                           {/* Column 1: Formula & Calculation */}
+                           <div className="space-y-1.5">
+                             <p className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                               <HelpCircle size={14} className="text-red-500" />
+                               1. Rumus &amp; Perhitungan Angka ({wastePct.toFixed(0)}%)
+                             </p>
+                             <ul className="space-y-1 text-slate-600 text-[11px] font-medium pl-5 list-disc">
+                               <li>
+                                 <span className="font-semibold text-slate-800">Skala Comstock:</span> Skala {tx.comstockScale !== undefined ? tx.comstockScale : '-'} ({scaleObj?.label || `${wastePct}% sisa`})
+                               </li>
+                               <li>
+                                 <span className="font-semibold text-slate-800">Rumus Persentase:</span> (Berat Sisa / Total Berat Porsi) × 100%
+                               </li>
+                               <li className="font-mono text-emerald-800 font-bold bg-emerald-50 px-2 py-1 rounded border border-emerald-200 inline-block">
+                                 = ({(tx.wasteWeight || 0).toFixed(0)} gram / {totalWeight.toFixed(0)} gram) × 100% = {wastePct.toFixed(0)}%
+                               </li>
+                             </ul>
+                           </div>
+
+                           {/* Column 2: Data Origin */}
+                           <div className="space-y-1.5">
+                             <p className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                               <Database size={14} className="text-blue-500" />
+                               2. Asal / Sumber Data
+                             </p>
+                             <ul className="space-y-1 text-slate-600 text-[11px] font-medium pl-5 list-disc">
+                               <li><span className="font-semibold text-slate-800">Pasien:</span> {tx.patientName} (RM: {tx.medicalRecordNumber || '-'})</li>
+                               <li><span className="font-semibold text-slate-800">Waktu Observasi:</span> {tx.timestamp ? format(tx.timestamp, 'dd MMMM yyyy, HH:mm') : '-'}</li>
+                               <li><span className="font-semibold text-slate-800">Waktu Makan:</span> {(tx.mealTime || '').replace('_', ' ').toUpperCase()} ({tx.foodType || 'Makanan Pokok'})</li>
+                               <li><span className="font-semibold text-slate-800">Petugas Observasi:</span> {tx.staffName || 'Petugas Gizi'}</li>
+                               <li><span className="font-semibold text-slate-800">Alasan Sisa:</span> {tx.reason || 'Tidak ada catatan khusus'}</li>
+                             </ul>
+                           </div>
+                         </div>
+
+                         {/* Explanation / Conclusion */}
+                         <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-amber-900 font-medium text-[11px]">
+                           <span className="font-bold flex items-center gap-1 text-amber-950 mb-1">
+                             <Info size={14} className="text-amber-600" />
+                             Dasar Kesimpulan Peringatan:
+                           </span>
+                           Standar Pelayanan Gizi RS (Kemenkes RI) menetapkan batas ambang toleransi sisa makanan pasien maksimal <span className="font-bold">25%</span>. Karena sisa makanan pasien <span className="font-bold">{tx.patientName}</span> sebesar <span className="font-bold font-mono text-red-700">{wastePct.toFixed(0)}%</span> melebihi 25%, maka sistem mengelompokkan entri ini secara otomatis sebagai <span className="font-bold text-red-800 underline">Peringatan Waste / Sisa Tinggi</span>.
+                         </div>
+                       </motion.div>
+                     )}
+                   </AnimatePresence>
                  </div>
-                 <div className="text-right">
-                   <p className="text-xl font-black text-red-600">{((tx.wasteWeight / 400) * 100).toFixed(0)}%</p>
-                   <p className="text-[10px] font-bold text-red-400">SISA MAKANAN</p>
-                 </div>
-               </div>
-             ))}
+               );
+             })}
+
              {menuAlerts.length === 0 && (
                <div className="text-center py-8 text-slate-400 italic">
-                 Tidak ada catatan melebihi ambang batas. Kerja bagus!
+                 Tidak ada catatan sisa makanan melebihi ambang batas 25%. Seluruh sajian tergolong efisien!
                </div>
              )}
            </div>
@@ -475,9 +539,15 @@ export default function Dashboard() {
         {/* Recent Transactions */}
         <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-6">
-               <h3 className="font-bold text-slate-800 text-lg">History Catatan Sisa Makan</h3>
-               <button className="text-emerald-600 text-sm font-bold flex items-center gap-1">
-                 Lihat Semua <ChevronRight size={16} />
+               <div className="text-left">
+                 <h3 className="font-bold text-slate-800 text-lg">History Catatan Sisa Makan</h3>
+                 <p className="text-xs text-slate-400 font-medium">10 Observasi Terakhir</p>
+               </div>
+               <button 
+                 onClick={() => setShowAllHistoryModal(true)}
+                 className="text-emerald-600 hover:text-emerald-700 text-sm font-bold flex items-center gap-1 cursor-pointer hover:underline transition-all bg-emerald-50 px-3.5 py-1.5 rounded-xl border border-emerald-100 shadow-sm"
+               >
+                 <span>Lihat Semua ({displayedTransactions.length})</span> <ChevronRight size={16} />
                </button>
             </div>
             
@@ -488,10 +558,12 @@ export default function Dashboard() {
                 const isOwner = profile?.id === t.staffId;
                 const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(profile?.email || '');
                 const isAdmin = profile?.role === 'admin' || profile?.role === 'nutritionist' || isAdminEmail;
+                const wastePct = getTransactionWastePercentage(t);
+
                return (
                  <div key={t.id} className="group flex items-center gap-4 p-4 border border-slate-50 rounded-2xl transition-colors hover:bg-slate-50">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold uppercase text-xs">
-                      {t.mealTime}
+                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold uppercase text-xs shrink-0">
+                      {t.mealTime ? t.mealTime.substring(0, 3) : 'SIA'}
                     </div>
                     <div className="flex-1 overflow-hidden text-left">
                       <div className="flex items-center justify-between">
@@ -502,7 +574,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <p className="text-xs text-slate-400">
-                        {ward?.name} 
+                        {t.wardName || ward?.name} 
                         {t.roomNumber && ` • Kamar ${t.roomNumber}`}
                       </p>
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-1 truncate">
@@ -515,14 +587,14 @@ export default function Dashboard() {
                             <div className="flex gap-1">
                               <button 
                                 onClick={() => setEditingTx(t)}
-                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100"
+                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100 cursor-pointer"
                                 title="Edit"
                               >
                                 <Pencil size={14} />
                               </button>
                               <button 
                                 onClick={() => handleDelete(t.id)}
-                                className={`p-1.5 rounded-lg transition-colors border ${
+                                className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
                                   deletingId === t.id 
                                   ? 'text-white bg-red-600 border-red-600' 
                                   : 'text-slate-400 hover:text-red-600 hover:bg-red-50 border-transparent hover:border-red-100'
@@ -534,7 +606,7 @@ export default function Dashboard() {
                             </div>
                           )}
                           <div className="text-right">
-                            <p className="font-bold text-slate-900">{((t.wasteWeight / 400) * 100).toFixed(0)}%</p>
+                            <p className={`font-bold font-mono ${wastePct > 25 ? 'text-red-600' : 'text-emerald-600'}`}>{wastePct.toFixed(0)}%</p>
                             <p className="text-[10px] text-slate-300 font-bold uppercase">{format(t.timestamp || new Date(), 'dd/MM HH:mm')}</p>
                           </div>
                        </div>
@@ -542,7 +614,13 @@ export default function Dashboard() {
                  </div>
                )
              })}
-           </div>
+
+             {displayedTransactions.length === 0 && (
+               <div className="text-center py-12 text-slate-400 italic">
+                 Belum ada catatan sisa makanan.
+               </div>
+             )}
+            </div>
         </div>
       </div>
 
@@ -825,6 +903,196 @@ export default function Dashboard() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: Clear All Data Confirmation */}
+      <AnimatePresence>
+        {showClearConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowClearConfirm(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-6 sm:p-8 text-center space-y-4 z-10"
+            >
+              <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-2 border border-rose-200">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-display font-black text-slate-900">Kosongkan Semua Data Transaksi?</h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Tindakan ini akan menghapus <span className="font-bold text-slate-800">{transactions.length} entri catatan sisa makanan</span> secara permanen di database Firestore. Data yang dihapus tidak dapat dikembalikan.
+              </p>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(false)}
+                  disabled={isClearing}
+                  className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all cursor-pointer text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAllData}
+                  disabled={isClearing}
+                  className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-all shadow-md shadow-rose-950/20 flex items-center justify-center gap-2 cursor-pointer text-xs"
+                >
+                  {isClearing ? 'Mengosongkan...' : 'Ya, Kosongkan Data'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: All History View ("Lihat Semua") */}
+      <AnimatePresence>
+        {showAllHistoryModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowAllHistoryModal(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-3xl max-h-[85vh] bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col z-10"
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50">
+                <div className="text-left">
+                  <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                    <FileText className="text-emerald-600" size={22} />
+                    Seluruh History Catatan Sisa Makan
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Total {displayedTransactions.length} entri observasi sisa makanan
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setShowAllHistoryModal(false)}
+                  className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 cursor-pointer"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Search & Actions Bar */}
+              <div className="p-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row gap-3 items-center justify-between shrink-0">
+                <div className="relative w-full sm:w-72">
+                  <input 
+                    type="text"
+                    placeholder="Cari nama pasien, RM, atau bangsal..."
+                    value={historySearch}
+                    onChange={e => setHistorySearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-100 outline-none"
+                  />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                </div>
+
+                <Link
+                  to="/reports"
+                  onClick={() => setShowAllHistoryModal(false)}
+                  className="w-full sm:w-auto px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <span>Buka Laporan Lengkap</span>
+                  <ChevronRight size={14} />
+                </Link>
+              </div>
+
+              {/* List Content */}
+              <div className="p-6 overflow-y-auto space-y-3 flex-1">
+                {displayedTransactions
+                  .filter(t => {
+                    if (!historySearch.trim()) return true;
+                    const q = historySearch.toLowerCase();
+                    return (
+                      (t.patientName || '').toLowerCase().includes(q) ||
+                      (t.medicalRecordNumber || '').toLowerCase().includes(q) ||
+                      (t.wardName || '').toLowerCase().includes(q)
+                    );
+                  })
+                  .map(t => {
+                    const menu = menus.find(m => m.id === t.menuId);
+                    const ward = wards.find(w => w.id === t.wardId);
+                    const isOwner = profile?.id === t.staffId;
+                    const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(profile?.email || '');
+                    const isAdmin = profile?.role === 'admin' || profile?.role === 'nutritionist' || isAdminEmail;
+                    const wastePct = getTransactionWastePercentage(t);
+
+                    return (
+                      <div key={t.id} className="flex items-center gap-4 p-3.5 border border-slate-100 rounded-2xl hover:bg-slate-50 transition-colors">
+                        <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold uppercase text-[10px] shrink-0">
+                          {t.mealTime ? t.mealTime.substring(0, 3) : 'SIA'}
+                        </div>
+                        <div className="flex-1 overflow-hidden text-left">
+                          <div className="flex items-center justify-between">
+                            <p className="font-bold text-slate-800 text-sm truncate">{t.patientName}</p>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">{t.dietType || 'Biasa'}</span>
+                              <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase">{t.foodType || 'Makanan Pokok'}</span>
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-slate-400 font-medium">
+                            {t.wardName || ward?.name} {t.roomNumber && ` • Kamar ${t.roomNumber}`} | RM: {t.medicalRecordNumber || '-'}
+                          </p>
+                        </div>
+                        <div className="text-right flex items-center gap-2 shrink-0">
+                          {(isOwner || isAdmin) && (
+                            <div className="flex gap-1">
+                              <button 
+                                onClick={() => { setShowAllHistoryModal(false); setEditingTx(t); }}
+                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100 cursor-pointer"
+                                title="Edit"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button 
+                                onClick={() => handleDelete(t.id)}
+                                className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
+                                  deletingId === t.id 
+                                  ? 'text-white bg-red-600 border-red-600' 
+                                  : 'text-slate-400 hover:text-red-600 hover:bg-red-50 border-transparent hover:border-red-100'
+                                }`}
+                                title={deletingId === t.id ? "Klik lagi untuk hapus" : "Hapus"}
+                              >
+                                {deletingId === t.id ? <span className="text-[10px] font-black px-1">YAKIN?</span> : <Trash2 size={14} />}
+                              </button>
+                            </div>
+                          )}
+                          <div className="text-right min-w-[50px]">
+                            <p className={`font-black font-mono text-sm ${wastePct > 25 ? 'text-red-600' : 'text-emerald-600'}`}>
+                              {wastePct.toFixed(0)}%
+                            </p>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">
+                              {format(t.timestamp || new Date(), 'dd/MM HH:mm')}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                {displayedTransactions.length === 0 && (
+                  <div className="text-center py-12 text-slate-400 italic text-sm">
+                    Tidak ada data transaksi yang ditemukan.
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>
