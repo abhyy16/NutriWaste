@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, limit, where, deleteDoc, doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, where, deleteDoc, doc, updateDoc, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Transaction, Menu, Ward, COMSTOCK_VALUES } from '../types';
 import { 
@@ -16,7 +16,27 @@ import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { calculateCumulativeWasteFromTransactions, getTransactionWastePercentage } from '../lib/recap';
+import { calculateCumulativeWasteFromTransactions, getTransactionWastePercentage, groupTransactionsByPatient, GroupedPatient } from '../lib/recap';
+
+interface EditingGroupState {
+  patientKey: string;
+  patientName: string;
+  medicalRecordNumber: string;
+  patientGender: 'L' | 'P';
+  patientAge: number;
+  wardId: string;
+  wardName: string;
+  roomNumber: string;
+  dietType: string;
+  menuId: string;
+  mealTime: string;
+  itemsMap: Record<string, {
+    id?: string;
+    foodType: string;
+    comstockScale: number;
+    reason: string;
+  }>;
+}
 
 export default function Dashboard() {
   const { profile } = useAuth();
@@ -25,6 +45,8 @@ export default function Dashboard() {
   const [wards, setWards] = useState<Ward[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [editingGroup, setEditingGroup] = useState<EditingGroupState | null>(null);
+  const [savingGroup, setSavingGroup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -33,7 +55,9 @@ export default function Dashboard() {
   const [historySearch, setHistorySearch] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  const [expandedAlertId, setExpandedAlertId] = useState<string | null>(null);
+  const [expandedAlertKey, setExpandedAlertKey] = useState<string | null>(null);
+  const [expandedHistoryKey, setExpandedHistoryKey] = useState<string | null>(null);
+  const [expandedModalKey, setExpandedModalKey] = useState<string | null>(null);
 
   const handleClearAllData = async () => {
     try {
@@ -151,6 +175,106 @@ export default function Dashboard() {
     }
   };
 
+  const openEditGroupModal = (gp: GroupedPatient) => {
+    const firstItem = gp.items[0];
+    const itemsMap: Record<string, { id?: string; foodType: string; comstockScale: number; reason: string }> = {};
+
+    const categories = ['Makanan Pokok', 'Lauk Hewani', 'Lauk Nabati', 'Sayuran', 'Buah'];
+    
+    categories.forEach(cat => {
+      const existing = gp.items.find(i => (i.foodType || 'Makanan Pokok') === cat);
+      if (existing) {
+        itemsMap[cat] = {
+          id: existing.id,
+          foodType: cat,
+          comstockScale: existing.comstockScale ?? 0,
+          reason: existing.reason || ''
+        };
+      } else {
+        itemsMap[cat] = {
+          foodType: cat,
+          comstockScale: 0,
+          reason: ''
+        };
+      }
+    });
+
+    setEditingGroup({
+      patientKey: gp.key,
+      patientName: gp.patientName || firstItem?.patientName || 'Pasien',
+      medicalRecordNumber: (gp.medicalRecordNumber && gp.medicalRecordNumber !== '-') ? gp.medicalRecordNumber : (firstItem?.medicalRecordNumber || ''),
+      patientGender: ((firstItem?.patientGender || gp.patientGender || 'L') === 'P' ? 'P' : 'L'),
+      patientAge: gp.patientAge || firstItem?.patientAge || 0,
+      wardId: gp.wardId || firstItem?.wardId || 'w1',
+      wardName: gp.wardName || firstItem?.wardName || '',
+      roomNumber: (gp.roomNumber && gp.roomNumber !== '-') ? gp.roomNumber : (firstItem?.roomNumber || ''),
+      dietType: gp.dietType || firstItem?.dietType || 'Biasa',
+      menuId: firstItem?.menuId || 'manual',
+      mealTime: firstItem?.mealTime || 'makan_siang',
+      itemsMap
+    });
+  };
+
+  const handleSaveGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGroup) return;
+
+    try {
+      setSavingGroup(true);
+      setError(null);
+
+      const categories = Object.keys(editingGroup.itemsMap);
+      const selectedWardObj = wards.find(w => w.id === editingGroup.wardId);
+
+      await Promise.all(categories.map(async (cat) => {
+        const itemData = editingGroup.itemsMap[cat];
+        const scaleObj = COMSTOCK_VALUES.find(v => v.scale === itemData.comstockScale) || COMSTOCK_VALUES[0];
+        const weight = 400;
+        const wasteWeight = weight * (scaleObj.percentage / 100);
+        const consumptionWeight = weight - wasteWeight;
+
+        const payload = {
+          medicalRecordNumber: editingGroup.medicalRecordNumber || null,
+          patientName: editingGroup.patientName,
+          patientGender: editingGroup.patientGender || 'L',
+          patientAge: Number(editingGroup.patientAge) || 0,
+          wardId: editingGroup.wardId || 'w1',
+          wardName: editingGroup.wardName || selectedWardObj?.name || 'Rawat Inap',
+          roomNumber: editingGroup.roomNumber || null,
+          dietType: editingGroup.dietType || 'Biasa',
+          menuId: editingGroup.menuId || 'manual',
+          mealTime: editingGroup.mealTime || 'makan_siang',
+          foodType: cat,
+          comstockScale: itemData.comstockScale,
+          wasteWeight,
+          consumptionWeight,
+          reason: itemData.reason || null,
+          updatedAt: serverTimestamp()
+        };
+
+        if (itemData.id) {
+          const txRef = doc(db, 'transactions', itemData.id);
+          await updateDoc(txRef, payload);
+        } else if (itemData.comstockScale > 0 || (itemData.reason && itemData.reason.trim())) {
+          await addDoc(collection(db, 'transactions'), {
+            ...payload,
+            staffId: profile?.id || 'staff1',
+            staffName: profile?.name || 'Petugas Gizi',
+            timestamp: serverTimestamp()
+          });
+        }
+      }));
+
+      setEditingGroup(null);
+    } catch (err: any) {
+      console.error('Gagal menyimpan perubahan kelompok pasien:', err);
+      setError(err.message || 'Gagal menyimpan perubahan laporan pasien.');
+      handleFirestoreError(err, OperationType.UPDATE, 'transactions/group');
+    } finally {
+      setSavingGroup(false);
+    }
+  };
+
   // Logical Helpers - Perhitungan Rekapitulasi Sisa Makanan Pasien
   const displayedTransactions = transactions.filter(t => (selectedWard === 'all' || t.wardId === selectedWard) && t.foodType !== 'Semua (Komposit)');
 
@@ -179,7 +303,7 @@ export default function Dashboard() {
     const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(mtTransactions);
 
     return {
-      name: m.replace('_', ' ').toUpperCase(),
+      name: (m || '').replace('_', ' ').toUpperCase(),
       value: Number(overallWastePercentage.toFixed(1))
     };
   });
@@ -204,10 +328,14 @@ export default function Dashboard() {
     };
   });
 
-  // Alarms: Transactions with > 25% waste using synchronized percentage
+  // Alarms: Transactions with > 20% waste using synchronized percentage
   const menuAlerts = displayedTransactions.filter(t => {
-     return getTransactionWastePercentage(t) > 25;
+     return getTransactionWastePercentage(t) > 20;
   });
+
+  // Grouped Patients for Alerts and History cards (1 Card per Pasien)
+  const groupedAlertPatients = groupTransactionsByPatient(menuAlerts);
+  const groupedHistoryPatients = groupTransactionsByPatient(displayedTransactions);
 
   const COLORS = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#ecfdf5'];
 
@@ -246,7 +374,7 @@ export default function Dashboard() {
               {profile?.photoURL ? (
                 <img src={profile.photoURL} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                profile?.name.substring(0, 2).toUpperCase() || 'UN'
+                (profile?.name || 'UN').substring(0, 2).toUpperCase()
               )}
             </div>
             <div className="absolute -bottom-1 -right-1 p-1.5 bg-emerald-500 text-white rounded-xl border border-emerald-950 shadow">
@@ -317,9 +445,9 @@ export default function Dashboard() {
         <StatCard 
           title="Avg Waste" 
           value={`${avgWaste.toFixed(0)}%`} 
-          subText="Target: <25%" 
+          subText="Target: <20%" 
           icon={TrendingUp} 
-          trend={avgWaste > 25 ? 'bad' : 'good'}
+          trend={avgWaste > 20 ? 'bad' : 'good'}
         />
         <StatCard 
           title="Records" 
@@ -418,98 +546,158 @@ export default function Dashboard() {
                  <AlertTriangle size={22} />
                </div>
                <div>
-                 <h3 className="font-bold text-slate-800 text-lg">Peringatan Waste (&gt; 25%)</h3>
-                 <p className="text-xs text-slate-500 font-medium">Berdasarkan indikator mutu pelayanan gizi Kemenkes RI (Standar sisa makanan ≤ 25%)</p>
+                 <h3 className="font-bold text-slate-800 text-lg">Peringatan Waste (&gt; 20%)</h3>
+                 <p className="text-xs text-slate-500 font-medium">Berdasarkan indikator mutu pelayanan gizi Kemenkes RI (Standar sisa makanan ≤ 20%)</p>
                </div>
              </div>
              <span className="px-3 py-1 bg-red-50 text-red-700 border border-red-200 rounded-full text-xs font-black">
-               {menuAlerts.length} Peringatan
+               {groupedAlertPatients.length} Pasien Peringatan
              </span>
            </div>
            
            <div className="space-y-4">
-             {menuAlerts.map(tx => {
-               const wastePct = getTransactionWastePercentage(tx);
-               const isExpanded = expandedAlertId === tx.id;
-               const scaleObj = COMSTOCK_VALUES.find(v => v.scale === tx.comstockScale);
-               const ward = wards.find(w => w.id === tx.wardId);
-               const totalWeight = (tx.wasteWeight || 0) + (tx.consumptionWeight || 0) || 400;
+             {groupedAlertPatients.map(gp => {
+               const isExpanded = expandedAlertKey === gp.key;
+               const ward = wards.find(w => w.id === gp.wardId);
 
                return (
-                 <div key={tx.id} className="border border-red-100 bg-red-50/60 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:border-red-200">
-                   <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3">
+                 <div key={gp.key} className="border border-red-100 bg-red-50/60 rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:border-red-200">
+                   <div 
+                     onClick={() => setExpandedAlertKey(isExpanded ? null : gp.key)}
+                     className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3 cursor-pointer select-none hover:bg-red-100/40 transition-colors"
+                   >
                      <div className="space-y-1 text-left">
                        <div className="flex items-center gap-2 flex-wrap">
-                         <p className="font-bold text-red-950 text-base">{tx.patientName}</p>
+                         <p className="font-bold text-red-950 text-base">{gp.patientName}</p>
                          <span className="text-[10px] font-black text-red-700 bg-red-100 px-2 py-0.5 rounded-md uppercase">
-                           RM: {tx.medicalRecordNumber || '-'}
+                           RM: {gp.medicalRecordNumber || '-'}
                          </span>
                          <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
-                           {tx.dietType || 'Biasa'}
+                           {gp.dietType || 'Biasa'}
+                         </span>
+                         <span className="text-[10px] font-extrabold text-red-800 bg-red-200/80 px-2 py-0.5 rounded-md">
+                           {gp.items.length} Komponen
                          </span>
                        </div>
                        <p className="text-xs text-slate-600 font-medium">
-                         {tx.wardName || ward?.name || 'Rawat Inap'} {tx.roomNumber ? `• Kamar ${tx.roomNumber}` : ''} ({tx.foodType || 'Makanan Pokok'})
+                         {gp.wardName || ward?.name || 'Rawat Inap'} {gp.roomNumber && gp.roomNumber !== '-' ? `• Kamar ${gp.roomNumber}` : ''}
                        </p>
                      </div>
 
-                     <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                     <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 flex-wrap">
+                       <button
+                         type="button"
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           openEditGroupModal(gp);
+                         }}
+                         className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                       >
+                         <Pencil size={13} />
+                         <span>Edit Laporan Pasien</span>
+                       </button>
                        <div className="text-right">
-                         <p className="text-xl font-black text-red-600 font-mono">{wastePct.toFixed(0)}%</p>
-                         <p className="text-[9px] font-bold text-red-500 uppercase tracking-tight">SISA MAKANAN</p>
+                         <p className="text-xl font-black text-red-600 font-mono">{gp.avgWastePercentage.toFixed(0)}%</p>
+                         <p className="text-[9px] font-bold text-red-500 uppercase tracking-tight">RATA-RATA SISA</p>
                        </div>
                        <button
-                         onClick={() => setExpandedAlertId(isExpanded ? null : tx.id)}
-                         className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 text-red-700 rounded-xl text-xs font-bold hover:bg-red-100 transition-colors cursor-pointer shadow-sm"
+                         type="button"
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           setExpandedAlertKey(isExpanded ? null : gp.key);
+                         }}
+                         className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 text-red-700 rounded-xl text-xs font-bold hover:bg-red-100 transition-colors cursor-pointer shadow-sm active:scale-[0.98]"
                        >
-                         <span>{isExpanded ? 'Tutup Detail' : 'Perhitungan & Sumber'}</span>
+                         <span>{isExpanded ? 'Tutup Detail' : 'Detail Makanan'}</span>
                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                        </button>
                      </div>
                    </div>
 
-                   {/* Detailed calculation and explanation drawer */}
+                   {/* Accordion Expanded Detail */}
                    <AnimatePresence>
                      {isExpanded && (
                        <motion.div
                          initial={{ height: 0, opacity: 0 }}
                          animate={{ height: 'auto', opacity: 1 }}
                          exit={{ height: 0, opacity: 0 }}
+                         transition={{ duration: 0.2, ease: "easeOut" }}
                          className="border-t border-red-200/80 bg-white p-4 space-y-3.5 text-xs text-slate-700 text-left"
                        >
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-                           {/* Column 1: Formula & Calculation */}
-                           <div className="space-y-1.5">
-                             <p className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
-                               <HelpCircle size={14} className="text-red-500" />
-                               1. Rumus &amp; Perhitungan Angka ({wastePct.toFixed(0)}%)
-                             </p>
-                             <ul className="space-y-1 text-slate-600 text-[11px] font-medium pl-5 list-disc">
-                               <li>
-                                 <span className="font-semibold text-slate-800">Skala Comstock:</span> Skala {tx.comstockScale !== undefined ? tx.comstockScale : '-'} ({scaleObj?.label || `${wastePct}% sisa`})
-                               </li>
-                               <li>
-                                 <span className="font-semibold text-slate-800">Rumus Persentase:</span> (Berat Sisa / Total Berat Porsi) × 100%
-                               </li>
-                               <li className="font-mono text-emerald-800 font-bold bg-emerald-50 px-2 py-1 rounded border border-emerald-200 inline-block">
-                                 = ({(tx.wasteWeight || 0).toFixed(0)} gram / {totalWeight.toFixed(0)} gram) × 100% = {wastePct.toFixed(0)}%
-                               </li>
-                             </ul>
-                           </div>
+                         <div>
+                           <p className="font-extrabold text-slate-900 text-xs mb-2.5 flex items-center gap-1.5">
+                             <Utensils size={14} className="text-red-500" />
+                             Rincian Data Makanan Pasien ({gp.items.length} Komponen Makanan):
+                           </p>
+                           <div className="space-y-2">
+                             {gp.items.map(item => {
+                               const itemWaste = getTransactionWastePercentage(item);
+                               const itemMenu = menus.find(m => m.id === item.menuId);
+                               const scaleObj = COMSTOCK_VALUES.find(v => v.scale === item.comstockScale);
+                               const isOwner = profile?.id === item.staffId;
+                               const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(profile?.email || '');
+                               const isAdmin = profile?.role === 'admin' || profile?.role === 'nutritionist' || isAdminEmail;
 
-                           {/* Column 2: Data Origin */}
-                           <div className="space-y-1.5">
-                             <p className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
-                               <Database size={14} className="text-blue-500" />
-                               2. Asal / Sumber Data
-                             </p>
-                             <ul className="space-y-1 text-slate-600 text-[11px] font-medium pl-5 list-disc">
-                               <li><span className="font-semibold text-slate-800">Pasien:</span> {tx.patientName} (RM: {tx.medicalRecordNumber || '-'})</li>
-                               <li><span className="font-semibold text-slate-800">Waktu Observasi:</span> {tx.timestamp ? format(tx.timestamp, 'dd MMMM yyyy, HH:mm') : '-'}</li>
-                               <li><span className="font-semibold text-slate-800">Waktu Makan:</span> {(tx.mealTime || '').replace('_', ' ').toUpperCase()} ({tx.foodType || 'Makanan Pokok'})</li>
-                               <li><span className="font-semibold text-slate-800">Petugas Observasi:</span> {tx.staffName || 'Petugas Gizi'}</li>
-                               <li><span className="font-semibold text-slate-800">Alasan Sisa:</span> {tx.reason || 'Tidak ada catatan khusus'}</li>
-                             </ul>
+                               return (
+                                 <div key={item.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-100/80 transition-colors">
+                                   <div className="space-y-1">
+                                     <div className="flex items-center gap-2 flex-wrap">
+                                       <span className="px-2 py-0.5 bg-amber-100 border border-amber-200 text-amber-900 text-[10px] font-black rounded uppercase">
+                                         {item.foodType || 'Makanan Pokok'}
+                                       </span>
+                                       <span className="px-2 py-0.5 bg-slate-200 text-slate-700 text-[10px] font-bold rounded uppercase">
+                                         {(item.mealTime || '').replace('_', ' ').toUpperCase()}
+                                       </span>
+                                       <span className="text-[11px] font-bold text-slate-800">
+                                         Menu: <span className="text-slate-600 font-normal">{itemMenu?.foodItems || 'Menu Siklus'}</span>
+                                       </span>
+                                     </div>
+                                     <p className="text-[10px] text-slate-500">
+                                       Petugas: <span className="font-medium text-slate-700">{item.staffName || 'Petugas Gizi'}</span>
+                                       {item.reason && item.reason !== '-' && (
+                                         <span className="ml-2 italic text-amber-800 font-medium">({item.reason})</span>
+                                       )}
+                                     </p>
+                                   </div>
+
+                                   <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                                     <div className="text-right">
+                                       <span className={`font-mono font-black text-sm ${itemWaste > 20 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                         {itemWaste.toFixed(0)}% Sisa
+                                       </span>
+                                       <p className="text-[9px] text-slate-400 font-semibold">
+                                         {scaleObj?.label || `Skala ${item.comstockScale}`}
+                                       </p>
+                                     </div>
+
+                                     {(isOwner || isAdmin) && (
+                                       <div className="flex items-center gap-1">
+                                         <button
+                                           type="button"
+                                           onClick={(e) => { e.stopPropagation(); setEditingTx(item); }}
+                                           className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition border border-transparent hover:border-emerald-100 cursor-pointer"
+                                           title="Edit Item Ini"
+                                         >
+                                           <Pencil size={13} />
+                                         </button>
+                                         <button
+                                           type="button"
+                                           onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+                                           className={`p-1.5 rounded-lg transition border cursor-pointer ${
+                                             deletingId === item.id
+                                               ? 'text-white bg-red-600 border-red-600'
+                                               : 'text-slate-400 hover:text-red-600 hover:bg-red-50 border-transparent hover:border-red-100'
+                                           }`}
+                                           title="Hapus Item Ini"
+                                         >
+                                           {deletingId === item.id ? <span className="text-[9px] font-black px-1">YAKIN?</span> : <Trash2 size={13} />}
+                                         </button>
+                                       </div>
+                                     )}
+                                   </div>
+                                 </div>
+                               );
+                             })}
                            </div>
                          </div>
 
@@ -517,9 +705,9 @@ export default function Dashboard() {
                          <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-amber-900 font-medium text-[11px]">
                            <span className="font-bold flex items-center gap-1 text-amber-950 mb-1">
                              <Info size={14} className="text-amber-600" />
-                             Dasar Kesimpulan Peringatan:
+                             Dasar Kesimpulan Peringatan Kemenkes RI:
                            </span>
-                           Standar Pelayanan Gizi RS (Kemenkes RI) menetapkan batas ambang toleransi sisa makanan pasien maksimal <span className="font-bold">25%</span>. Karena sisa makanan pasien <span className="font-bold">{tx.patientName}</span> sebesar <span className="font-bold font-mono text-red-700">{wastePct.toFixed(0)}%</span> melebihi 25%, maka sistem mengelompokkan entri ini secara otomatis sebagai <span className="font-bold text-red-800 underline">Peringatan Waste / Sisa Tinggi</span>.
+                           Standar Pelayanan Gizi RS menetapkan batas ambang toleransi sisa makanan pasien maksimal <span className="font-bold">20%</span>. Karena sisa makanan rata-rata pasien <span className="font-bold">{gp.patientName}</span> sebesar <span className="font-bold font-mono text-red-700">{gp.avgWastePercentage.toFixed(0)}%</span> melebihi 20%, sistem memberikan peringatan otomatis.
                          </div>
                        </motion.div>
                      )}
@@ -528,9 +716,9 @@ export default function Dashboard() {
                );
              })}
 
-             {menuAlerts.length === 0 && (
+             {groupedAlertPatients.length === 0 && (
                <div className="text-center py-8 text-slate-400 italic">
-                 Tidak ada catatan sisa makanan melebihi ambang batas 25%. Seluruh sajian tergolong efisien!
+                 Tidak ada catatan sisa makanan melebihi ambang batas 20%. Seluruh sajian tergolong efisien!
                </div>
              )}
            </div>
@@ -541,85 +729,173 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-6">
                <div className="text-left">
                  <h3 className="font-bold text-slate-800 text-lg">History Catatan Sisa Makan</h3>
-                 <p className="text-xs text-slate-400 font-medium">10 Observasi Terakhir</p>
+                 <p className="text-xs text-slate-400 font-medium">Ringkasan per Pasien ({groupedHistoryPatients.length} Pasien)</p>
                </div>
                <button 
                  onClick={() => setShowAllHistoryModal(true)}
-                 className="text-emerald-600 hover:text-emerald-700 text-sm font-bold flex items-center gap-1 cursor-pointer hover:underline transition-all bg-emerald-50 px-3.5 py-1.5 rounded-xl border border-emerald-100 shadow-sm"
+                 className="text-emerald-600 hover:text-emerald-700 text-sm font-bold flex items-center gap-1 cursor-pointer hover:underline transition-all bg-emerald-50 px-3.5 py-1.5 rounded-xl border border-emerald-100 shadow-sm active:scale-[0.98]"
                >
-                 <span>Lihat Semua ({displayedTransactions.length})</span> <ChevronRight size={16} />
+                 <span>Lihat Semua ({groupedHistoryPatients.length} Pasien)</span> <ChevronRight size={16} />
                </button>
             </div>
             
-            <div className="space-y-4">
-              {displayedTransactions.slice(0, 10).map(t => {
-                const menu = menus.find(m => m.id === t.menuId);
-                const ward = wards.find(w => w.id === t.wardId);
-                const isOwner = profile?.id === t.staffId;
-                const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(profile?.email || '');
-                const isAdmin = profile?.role === 'admin' || profile?.role === 'nutritionist' || isAdminEmail;
-                const wastePct = getTransactionWastePercentage(t);
+            <div className="space-y-3">
+              {groupedHistoryPatients.slice(0, 10).map(gp => {
+                const isExpanded = expandedHistoryKey === gp.key;
+                const ward = wards.find(w => w.id === gp.wardId);
 
-               return (
-                 <div key={t.id} className="group flex items-center gap-4 p-4 border border-slate-50 rounded-2xl transition-colors hover:bg-slate-50">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold uppercase text-xs shrink-0">
-                      {t.mealTime ? t.mealTime.substring(0, 3) : 'SIA'}
-                    </div>
-                    <div className="flex-1 overflow-hidden text-left">
-                      <div className="flex items-center justify-between">
-                        <p className="font-bold text-slate-800 truncate">{t.patientName}</p>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md uppercase tracking-tight">{t.dietType || 'Biasa'}</span>
-                          <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 flex-nowrap py-0.5 rounded-md uppercase tracking-tight truncate max-w-[80px] sm:max-w-none">{t.foodType || 'Makanan Pokok'}</span>
+                return (
+                  <div key={gp.key} className="border border-slate-100 bg-white rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:border-slate-200">
+                    <div 
+                      onClick={() => setExpandedHistoryKey(isExpanded ? null : gp.key)}
+                      className="flex items-center justify-between p-4 gap-3 cursor-pointer select-none hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 overflow-hidden text-left">
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+                          {(gp.patientName || 'P').substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="overflow-hidden">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-slate-800 truncate">{gp.patientName}</p>
+                            <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded uppercase">
+                              {gp.dietType || 'Biasa'}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                              {gp.items.length} Komponen
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 truncate mt-0.5">
+                            {gp.wardName || ward?.name} {gp.roomNumber && gp.roomNumber !== '-' ? `• Kamar ${gp.roomNumber}` : ''} | RM: {gp.medicalRecordNumber}
+                          </p>
                         </div>
                       </div>
-                      <p className="text-xs text-slate-400">
-                        {t.wardName || ward?.name} 
-                        {t.roomNumber && ` • Kamar ${t.roomNumber}`}
-                      </p>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-1 truncate">
-                        Menu: <span className="text-slate-400 italic">{menu?.foodItems || 'Siklus'}</span>
-                      </p>
-                    </div>
-                    <div className="text-right flex flex-col items-end gap-2 shrink-0">
-                       <div className="flex items-center gap-2">
-                          {(isOwner || isAdmin) && (
-                            <div className="flex gap-1">
-                              <button 
-                                onClick={() => setEditingTx(t)}
-                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100 cursor-pointer"
-                                title="Edit"
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button 
-                                onClick={() => handleDelete(t.id)}
-                                className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
-                                  deletingId === t.id 
-                                  ? 'text-white bg-red-600 border-red-600' 
-                                  : 'text-slate-400 hover:text-red-600 hover:bg-red-50 border-transparent hover:border-red-100'
-                                }`}
-                                title={deletingId === t.id ? "Klik lagi untuk hapus" : "Hapus"}
-                              >
-                                {deletingId === t.id ? <span className="text-[10px] font-black px-1">YAKIN?</span> : <Trash2 size={14} />}
-                              </button>
-                            </div>
-                          )}
-                          <div className="text-right">
-                            <p className={`font-bold font-mono ${wastePct > 25 ? 'text-red-600' : 'text-emerald-600'}`}>{wastePct.toFixed(0)}%</p>
-                            <p className="text-[10px] text-slate-300 font-bold uppercase">{format(t.timestamp || new Date(), 'dd/MM HH:mm')}</p>
-                          </div>
-                       </div>
-                    </div>
-                 </div>
-               )
-             })}
 
-             {displayedTransactions.length === 0 && (
-               <div className="text-center py-12 text-slate-400 italic">
-                 Belum ada catatan sisa makanan.
-               </div>
-             )}
+                      <div className="flex items-center gap-2.5 shrink-0 text-right">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditGroupModal(gp);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                        >
+                          <Pencil size={13} className="text-emerald-600" />
+                          <span className="hidden sm:inline">Edit Laporan</span>
+                          <span className="sm:hidden">Edit</span>
+                        </button>
+                        <div>
+                          <p className={`font-mono font-black text-base ${gp.avgWastePercentage > 20 ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {gp.avgWastePercentage.toFixed(0)}%
+                          </p>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase">
+                            {gp.latestTimestamp ? format(gp.latestTimestamp, 'dd/MM HH:mm') : '-'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedHistoryKey(isExpanded ? null : gp.key);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                        >
+                          {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Accordion Expanded Detail */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: "easeOut" }}
+                          className="border-t border-slate-100 bg-slate-50/70 p-4 space-y-2 text-xs text-left"
+                        >
+                          <p className="font-extrabold text-slate-800 text-xs mb-2 flex items-center gap-1.5">
+                            <Utensils size={14} className="text-emerald-600" />
+                            Rincian Detail Komponen Makanan Pasien ({gp.items.length} Item):
+                          </p>
+
+                          {gp.items.map(item => {
+                            const itemWaste = getTransactionWastePercentage(item);
+                            const itemMenu = menus.find(m => m.id === item.menuId);
+                            const scaleObj = COMSTOCK_VALUES.find(v => v.scale === item.comstockScale);
+                            const isOwner = profile?.id === item.staffId;
+                            const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(profile?.email || '');
+                            const isAdmin = profile?.role === 'admin' || profile?.role === 'nutritionist' || isAdminEmail;
+
+                            return (
+                              <div key={item.id} className="p-3 bg-white rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50 transition-colors">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-black rounded uppercase">
+                                      {item.foodType || 'Makanan Pokok'}
+                                    </span>
+                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded uppercase">
+                                      {(item.mealTime || '').replace('_', ' ').toUpperCase()}
+                                    </span>
+                                    <span className="text-[11px] font-medium text-slate-700">
+                                      Menu: <strong>{itemMenu?.foodItems || 'Siklus'}</strong>
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-400 font-medium">
+                                    Oleh: {item.staffName || 'Petugas'} {item.reason && item.reason !== '-' && `• Alasan: "${item.reason}"`}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                                  <div className="text-right">
+                                    <span className={`font-mono font-black text-sm ${itemWaste > 20 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                      {itemWaste.toFixed(0)}%
+                                    </span>
+                                    <p className="text-[9px] text-slate-400 font-semibold">
+                                      {scaleObj?.label || `${itemWaste}%`}
+                                    </p>
+                                  </div>
+
+                                  {(isOwner || isAdmin) && (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setEditingTx(item); }}
+                                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+                                        title="Edit Item Ini"
+                                      >
+                                        <Pencil size={14} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+                                        className={`p-1.5 rounded-lg transition cursor-pointer ${
+                                          deletingId === item.id
+                                            ? 'text-white bg-red-600'
+                                            : 'text-slate-400 hover:text-red-600 hover:bg-red-50'
+                                        }`}
+                                        title="Hapus Item Ini"
+                                      >
+                                        {deletingId === item.id ? <span className="text-[9px] font-black px-1">YAKIN?</span> : <Trash2 size={14} />}
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+
+              {groupedHistoryPatients.length === 0 && (
+                <div className="text-center py-12 text-slate-400 italic">
+                  Belum ada catatan sisa makanan.
+                </div>
+              )}
             </div>
         </div>
       </div>
@@ -627,32 +903,26 @@ export default function Dashboard() {
       {/* Edit Modal */}
       <AnimatePresence>
         {editingTx && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setEditingTx(null)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            />
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-slate-900/60 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+              className="relative w-full max-w-xl bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[88vh] my-auto"
             >
-              <div className="p-8">
-                <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-2xl font-black text-slate-900">Edit Rekam Data</h3>
-                  <button 
-                    onClick={() => setEditingTx(null)}
-                    className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"
-                  >
-                    <X size={24} />
-                  </button>
-                </div>
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50">
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900">Edit Rekam Data Item</h3>
+                <button 
+                  type="button"
+                  onClick={() => setEditingTx(null)}
+                  className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 cursor-pointer"
+                >
+                  <X size={22} />
+                </button>
+              </div>
 
-                <form onSubmit={handleUpdate} className="space-y-6">
+              <form onSubmit={handleUpdate} className="flex flex-col flex-1 overflow-hidden">
+                <div className="p-6 sm:p-8 space-y-6 overflow-y-auto flex-1">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-400 uppercase">No. Rekam Medis</label>
@@ -749,7 +1019,7 @@ export default function Dashboard() {
                       <option value="manual">Manual / Hari ini</option>
                       {menus.map(m => (
                         <option key={m.id} value={m.id}>
-                          H{m.cycleDay} - {m.mealTime.toUpperCase()}
+                          H{m.cycleDay} - {(m.mealTime || '').toUpperCase()}
                         </option>
                       ))}
                     </select>
@@ -902,8 +1172,310 @@ export default function Dashboard() {
                       <Save size={18} /> Simpan Perubahan
                     </button>
                   </div>
-                </form>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Grouped Edit Modal (Edit seluruh komponen & profil pasien dalam 1 kartu) */}
+      <AnimatePresence>
+        {editingGroup && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-3xl bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[88vh] my-auto text-left"
+            >
+              {/* Header */}
+              <div className="p-6 sm:p-7 bg-gradient-to-r from-emerald-700 to-teal-700 text-white flex items-center justify-between shrink-0 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-white/10 rounded-2xl border border-white/20 backdrop-blur-md">
+                    <Pencil size={22} className="text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl sm:text-2xl font-black tracking-tight leading-tight">
+                      Edit Laporan Pasien
+                    </h3>
+                    <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                      Kelola identitas & 5 komponen makanan pasien <span className="font-bold underline">{editingGroup.patientName}</span> dalam 1 halaman
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingGroup(null)}
+                  className="p-2.5 hover:bg-white/15 rounded-2xl transition-colors text-white/80 hover:text-white cursor-pointer"
+                >
+                  <X size={22} />
+                </button>
               </div>
+
+              {/* Scrollable Form Body */}
+              <form onSubmit={handleSaveGroup} className="flex flex-col flex-1 overflow-hidden">
+                <div className="p-6 sm:p-8 space-y-8 overflow-y-auto flex-1">
+                  {/* Section 1: Data Identitas & Rawat Inap */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                      <User size={18} className="text-emerald-600" />
+                      <h4 className="font-black text-slate-800 text-sm tracking-tight uppercase">Identitas & Data Rawat Inap</h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">No. Rekam Medis (RM)</label>
+                        <input
+                          type="text"
+                          value={editingGroup.medicalRecordNumber}
+                          onChange={e => setEditingGroup({...editingGroup, medicalRecordNumber: e.target.value})}
+                          placeholder="RM-XXXXXX"
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-200 outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Nama Lengkap Pasien *</label>
+                        <input
+                          type="text"
+                          value={editingGroup.patientName}
+                          onChange={e => setEditingGroup({...editingGroup, patientName: e.target.value})}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-200 outline-none"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Umur (Tahun)</label>
+                        <input
+                          type="number"
+                          value={editingGroup.patientAge || ''}
+                          onChange={e => setEditingGroup({...editingGroup, patientAge: Number(e.target.value)})}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-200 outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Jenis Kelamin</label>
+                        <div className="flex bg-slate-100 p-1 rounded-xl h-[42px]">
+                          {(['L', 'P'] as const).map(g => (
+                            <button
+                              key={g}
+                              type="button"
+                              onClick={() => setEditingGroup({...editingGroup, patientGender: g})}
+                              className={`flex-1 flex items-center justify-center text-[10px] font-black rounded-lg transition-all ${
+                                editingGroup.patientGender === g ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'
+                              }`}
+                            >
+                              {g === 'L' ? 'LAKI-LAKI ♂' : 'PEREMPUAN ♀'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Ruang Rawat / Unit *</label>
+                        <input
+                          type="text"
+                          value={editingGroup.wardName || wards.find(w => w.id === editingGroup.wardId)?.name || ''}
+                          onChange={e => setEditingGroup({...editingGroup, wardName: e.target.value})}
+                          placeholder="misal: Bangsal I / Melati"
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-200 outline-none"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">No. Kamar / Bed</label>
+                        <input
+                          type="text"
+                          value={editingGroup.roomNumber}
+                          onChange={e => setEditingGroup({...editingGroup, roomNumber: e.target.value})}
+                          placeholder="misal: 102A"
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-200 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Jenis Diet</label>
+                        <input
+                          type="text"
+                          value={editingGroup.dietType}
+                          onChange={e => setEditingGroup({...editingGroup, dietType: e.target.value})}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-200 outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Menu Makanan</label>
+                        <select
+                          value={editingGroup.menuId}
+                          onChange={e => setEditingGroup({...editingGroup, menuId: e.target.value})}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-200 outline-none"
+                        >
+                          <option value="manual">Manual / Hari ini</option>
+                          {menus.map(m => (
+                            <option key={m.id} value={m.id}>
+                              H{m.cycleDay} - {(m.mealTime || '').toUpperCase()}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Waktu Makan</label>
+                        <select
+                          value={editingGroup.mealTime}
+                          onChange={e => setEditingGroup({...editingGroup, mealTime: e.target.value})}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-200 outline-none"
+                        >
+                          <option value="sarapan">Makan Pagi / Sarapan</option>
+                          <option value="makan_siang">Makan Siang</option>
+                          <option value="makan_malam">Makan Malam</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 2: 5 Komponen Makanan dalam 1 Kartu Terpadu */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <Utensils size={18} className="text-emerald-600" />
+                        <h4 className="font-black text-slate-800 text-sm tracking-tight uppercase">
+                          Asesmen 5 Komponen Makanan Pasien
+                        </h4>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
+                        1 Kartu Terpadu
+                      </span>
+                    </div>
+
+                    <div className="space-y-4">
+                      {['Makanan Pokok', 'Lauk Hewani', 'Lauk Nabati', 'Sayuran', 'Buah'].map((fType) => {
+                        const currentItem = editingGroup.itemsMap[fType] || { foodType: fType, comstockScale: 0, reason: '' };
+                        const currentScale = currentItem.comstockScale;
+                        const matchedComstock = COMSTOCK_VALUES.find(v => v.scale === currentScale) || COMSTOCK_VALUES[0];
+
+                        const getFoodIcon = (type: string) => {
+                          switch(type) {
+                            case 'Makanan Pokok': return '🍞';
+                            case 'Lauk Hewani': return '🍗';
+                            case 'Lauk Nabati': return '🫘';
+                            case 'Sayuran': return '🥦';
+                            case 'Buah': return '🍎';
+                            default: return '🍱';
+                          }
+                        };
+
+                        return (
+                          <div key={fType} className="p-4 sm:p-5 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{getFoodIcon(fType)}</span>
+                                <span className="font-black text-slate-800 text-xs sm:text-sm">{fType}</span>
+                              </div>
+                              <span className={`text-xs font-mono font-black px-2.5 py-0.5 rounded-full ${
+                                matchedComstock.percentage > 20 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {matchedComstock.percentage}% Sisa ({matchedComstock.scale})
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                              {COMSTOCK_VALUES.map(v => {
+                                const isSelected = currentScale === v.scale;
+                                return (
+                                  <button
+                                    key={v.scale}
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingGroup({
+                                        ...editingGroup,
+                                        itemsMap: {
+                                          ...editingGroup.itemsMap,
+                                          [fType]: {
+                                            ...currentItem,
+                                            comstockScale: v.scale
+                                          }
+                                        }
+                                      });
+                                    }}
+                                    className={`py-2 px-1 rounded-xl transition-all flex flex-col items-center justify-center gap-1 border cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm font-bold scale-[1.02]'
+                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    <div
+                                      className="w-5 h-5 rounded-full border border-slate-300 relative shrink-0"
+                                      style={{
+                                        background: isSelected
+                                          ? `conic-gradient(#ffffff ${v.percentage}%, rgba(255,255,255,0.3) ${v.percentage}%)`
+                                          : `conic-gradient(#059669 ${v.percentage}%, #f1f5f9 ${v.percentage}%)`
+                                      }}
+                                    />
+                                    <span className="text-[9px] font-black">{v.percentage}%</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {currentScale > 0 && (
+                              <div className="pt-1">
+                                <select
+                                  value={currentItem.reason || ''}
+                                  onChange={e => {
+                                    setEditingGroup({
+                                      ...editingGroup,
+                                      itemsMap: {
+                                        ...editingGroup.itemsMap,
+                                        [fType]: {
+                                          ...currentItem,
+                                          reason: e.target.value
+                                        }
+                                      }
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-emerald-500"
+                                >
+                                  <option value="">-- Pilih Alasan Sisa Makan ({fType}) --</option>
+                                  <option value="Pasien tidak nafsu makan">Pasien tidak nafsu makan</option>
+                                  <option value="Porsi terlalu besar">Porsi terlalu besar</option>
+                                  <option value="Pasien pulang/tindakan medis">Pasien pulang/tindakan medis</option>
+                                  <option value="Makanan dingin">Makanan dingin</option>
+                                  <option value="Sensori / Rasa kurang cocok">Sensori / Rasa kurang cocok</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center justify-end gap-3 z-10">
+                  <button
+                    type="button"
+                    onClick={() => setEditingGroup(null)}
+                    className="px-5 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-xs transition cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingGroup}
+                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-950/20 flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <Save size={16} />
+                    <span>{savingGroup ? 'Menyimpan...' : 'Simpan Seluruh Laporan Pasien'}</span>
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}
@@ -1017,8 +1589,8 @@ export default function Dashboard() {
 
               {/* List Content */}
               <div className="p-6 overflow-y-auto space-y-3 flex-1">
-                {displayedTransactions
-                  .filter(t => {
+                {groupTransactionsByPatient(
+                  displayedTransactions.filter(t => {
                     if (!historySearch.trim()) return true;
                     const q = historySearch.toLowerCase();
                     return (
@@ -1027,66 +1599,160 @@ export default function Dashboard() {
                       (t.wardName || '').toLowerCase().includes(q)
                     );
                   })
-                  .map(t => {
-                    const menu = menus.find(m => m.id === t.menuId);
-                    const ward = wards.find(w => w.id === t.wardId);
-                    const isOwner = profile?.id === t.staffId;
-                    const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(profile?.email || '');
-                    const isAdmin = profile?.role === 'admin' || profile?.role === 'nutritionist' || isAdminEmail;
-                    const wastePct = getTransactionWastePercentage(t);
+                ).map(gp => {
+                  const isExpanded = expandedModalKey === gp.key;
+                  const ward = wards.find(w => w.id === gp.wardId);
 
-                    return (
-                      <div key={t.id} className="flex items-center gap-4 p-3.5 border border-slate-100 rounded-2xl hover:bg-slate-50 transition-colors">
-                        <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold uppercase text-[10px] shrink-0">
-                          {t.mealTime ? t.mealTime.substring(0, 3) : 'SIA'}
-                        </div>
-                        <div className="flex-1 overflow-hidden text-left">
-                          <div className="flex items-center justify-between">
-                            <p className="font-bold text-slate-800 text-sm truncate">{t.patientName}</p>
-                            <div className="flex items-center gap-1">
-                              <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">{t.dietType || 'Biasa'}</span>
-                              <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase">{t.foodType || 'Makanan Pokok'}</span>
-                            </div>
+                  return (
+                    <div key={gp.key} className="border border-slate-100 bg-white rounded-2xl overflow-hidden transition-all duration-200 shadow-sm hover:border-slate-200">
+                      <div 
+                        onClick={() => setExpandedModalKey(isExpanded ? null : gp.key)}
+                        className="flex items-center justify-between p-4 gap-3 cursor-pointer select-none hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden text-left">
+                          <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+                            {(gp.patientName || 'P').substring(0, 2).toUpperCase()}
                           </div>
-                          <p className="text-[11px] text-slate-400 font-medium">
-                            {t.wardName || ward?.name} {t.roomNumber && ` • Kamar ${t.roomNumber}`} | RM: {t.medicalRecordNumber || '-'}
-                          </p>
-                        </div>
-                        <div className="text-right flex items-center gap-2 shrink-0">
-                          {(isOwner || isAdmin) && (
-                            <div className="flex gap-1">
-                              <button 
-                                onClick={() => { setShowAllHistoryModal(false); setEditingTx(t); }}
-                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100 cursor-pointer"
-                                title="Edit"
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button 
-                                onClick={() => handleDelete(t.id)}
-                                className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
-                                  deletingId === t.id 
-                                  ? 'text-white bg-red-600 border-red-600' 
-                                  : 'text-slate-400 hover:text-red-600 hover:bg-red-50 border-transparent hover:border-red-100'
-                                }`}
-                                title={deletingId === t.id ? "Klik lagi untuk hapus" : "Hapus"}
-                              >
-                                {deletingId === t.id ? <span className="text-[10px] font-black px-1">YAKIN?</span> : <Trash2 size={14} />}
-                              </button>
+                          <div className="overflow-hidden">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-bold text-slate-800 truncate">{gp.patientName}</p>
+                              <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded uppercase">
+                                {gp.dietType || 'Biasa'}
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                                {gp.items.length} Komponen
+                              </span>
                             </div>
-                          )}
-                          <div className="text-right min-w-[50px]">
-                            <p className={`font-black font-mono text-sm ${wastePct > 25 ? 'text-red-600' : 'text-emerald-600'}`}>
-                              {wastePct.toFixed(0)}%
+                            <p className="text-xs text-slate-400 truncate mt-0.5">
+                              {gp.wardName || ward?.name} {gp.roomNumber && gp.roomNumber !== '-' ? `• Kamar ${gp.roomNumber}` : ''} | RM: {gp.medicalRecordNumber}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEditGroupModal(gp);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                          >
+                            <Pencil size={13} className="text-emerald-600" />
+                            <span className="hidden sm:inline">Edit Laporan</span>
+                            <span className="sm:hidden">Edit</span>
+                          </button>
+                          <div>
+                            <p className={`font-mono font-black text-base ${gp.avgWastePercentage > 20 ? 'text-red-600' : 'text-emerald-600'}`}>
+                              {gp.avgWastePercentage.toFixed(0)}%
                             </p>
                             <p className="text-[9px] text-slate-400 font-bold uppercase">
-                              {format(t.timestamp || new Date(), 'dd/MM HH:mm')}
+                              {gp.latestTimestamp ? format(gp.latestTimestamp, 'dd/MM HH:mm') : '-'}
                             </p>
                           </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedModalKey(isExpanded ? null : gp.key);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                          >
+                            {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
+
+                      {/* Accordion Expanded Detail */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
+                            className="border-t border-slate-100 bg-slate-50/70 p-4 space-y-2 text-xs text-left"
+                          >
+                            <p className="font-extrabold text-slate-800 text-xs mb-2 flex items-center gap-1.5">
+                              <Utensils size={14} className="text-emerald-600" />
+                              Rincian Detail Komponen Makanan Pasien ({gp.items.length} Item):
+                            </p>
+
+                            {gp.items.map(item => {
+                              const itemWaste = getTransactionWastePercentage(item);
+                              const itemMenu = menus.find(m => m.id === item.menuId);
+                              const scaleObj = COMSTOCK_VALUES.find(v => v.scale === item.comstockScale);
+                              const isOwner = profile?.id === item.staffId;
+                              const isAdminEmail = ['f1b02310096@student.unram.ac.id', 'nahdah031@gmail.com', 'arifah031@gmail.com'].includes(profile?.email || '');
+                              const isAdmin = profile?.role === 'admin' || profile?.role === 'nutritionist' || isAdminEmail;
+
+                              return (
+                                <div key={item.id} className="p-3 bg-white rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50 transition-colors">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-black rounded uppercase">
+                                        {item.foodType || 'Makanan Pokok'}
+                                      </span>
+                                      <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded uppercase">
+                                        {(item.mealTime || '').replace('_', ' ').toUpperCase()}
+                                      </span>
+                                      <span className="text-[11px] font-medium text-slate-700">
+                                        Menu: <strong>{itemMenu?.foodItems || 'Siklus'}</strong>
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 font-medium">
+                                      Oleh: {item.staffName || 'Petugas'} {item.reason && item.reason !== '-' && `• Alasan: "${item.reason}"`}
+                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                                    <div className="text-right">
+                                      <span className={`font-mono font-black text-sm ${itemWaste > 20 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                        {itemWaste.toFixed(0)}%
+                                      </span>
+                                      <p className="text-[9px] text-slate-400 font-semibold">
+                                        {scaleObj?.label || `${itemWaste}%`}
+                                      </p>
+                                    </div>
+
+                                    {(isOwner || isAdmin) && (
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            setShowAllHistoryModal(false); 
+                                            setEditingTx(item); 
+                                          }}
+                                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+                                          title="Edit Item Ini"
+                                        >
+                                          <Pencil size={14} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+                                          className={`p-1.5 rounded-lg transition cursor-pointer ${
+                                            deletingId === item.id
+                                              ? 'text-white bg-red-600'
+                                              : 'text-slate-400 hover:text-red-600 hover:bg-red-50'
+                                          }`}
+                                          title="Hapus Item Ini"
+                                        >
+                                          {deletingId === item.id ? <span className="text-[9px] font-black px-1">YAKIN?</span> : <Trash2 size={14} />}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
 
                 {displayedTransactions.length === 0 && (
                   <div className="text-center py-12 text-slate-400 italic text-sm">

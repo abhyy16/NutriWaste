@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Transaction, Menu, Ward, COMSTOCK_VALUES, MealTime } from '../types';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
@@ -58,14 +58,14 @@ function MiniBarChartCard({ title, data, maxItem, minItem, icon: Icon }: {
                     </span>
                   )}
                 </span>
-                <span className={`font-mono font-bold ${item.percentage > 25 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                <span className={`font-mono font-bold ${item.percentage > 20 ? 'text-rose-600' : 'text-emerald-600'}`}>
                   {item.percentage.toFixed(1)}%
                 </span>
               </div>
               <div className="h-3 bg-slate-100 rounded-full overflow-hidden relative">
                 <div 
                   className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${
-                    item.percentage > 25 ? 'from-rose-500 to-amber-500' : 'from-emerald-500 to-teal-500'
+                    item.percentage > 20 ? 'from-rose-500 to-amber-500' : 'from-emerald-500 to-teal-500'
                   }`}
                   style={{ width: `${Math.min(item.percentage, 100)}%` }}
                 />
@@ -115,6 +115,29 @@ export default function Reports() {
 
   // Tab & Patient Editing States
   const [viewTab, setViewTab] = useState<'rekap_pasien' | 'record_detail'>('rekap_pasien');
+  const [editingGroup, setEditingGroup] = useState<{
+    key: string;
+    patientName: string;
+    medicalRecordNumber: string;
+    patientGender: string;
+    patientAge: number;
+    wardName: string;
+    wardId: string;
+    roomNumber: string;
+    dietType: string;
+    items: {
+      id: string;
+      foodType: string;
+      mealTime: MealTime;
+      comstockScale: number;
+      reason: string;
+      wasteWeight: number;
+      consumptionWeight: number;
+      menuId?: string;
+    }[];
+  } | null>(null);
+  const [savingGroup, setSavingGroup] = useState(false);
+
   const [editingPatient, setEditingPatient] = useState<{
     patientKey: string;
     medicalRecordNumber: string;
@@ -203,7 +226,7 @@ export default function Reports() {
   };
 
   const exportPatientToExcel = (patientName: string) => {
-    const pTxs = transactions.filter(t => t.patientName.toLowerCase() === patientName.toLowerCase());
+    const pTxs = transactions.filter(t => (t.patientName || '').toLowerCase() === (patientName || '').toLowerCase());
     const data = pTxs.map(t => {
       const menu = menus.find(m => m.id === t.menuId);
       const ward = wards.find(w => w.id === t.wardId);
@@ -236,7 +259,7 @@ export default function Reports() {
   };
 
   const exportPatientToPDF = (patientName: string) => {
-    const pTxs = transactions.filter(t => t.patientName.toLowerCase() === patientName.toLowerCase());
+    const pTxs = transactions.filter(t => (t.patientName || '').toLowerCase() === (patientName || '').toLowerCase());
     const doc = new jsPDF('landscape');
     doc.setFontSize(18);
     doc.text(`Riwayat Sisa Makan: ${patientName}`, 14, 22);
@@ -263,7 +286,7 @@ export default function Reports() {
 
     autoTable(doc, {
       startY: 35,
-      head: [['Tanggal & Waktu', 'Unit', 'Kmr/Bed', 'Waktu Makan', 'Jenis', 'Gramasi Sisa', 'Waste %', 'Alasan']],
+      head: [['Tanggal & Waktu', 'Unit', 'Kmr/Bed', 'Waktu Makan', 'Jenis', 'Skala & Sisa', 'Waste %', 'Alasan']],
       body: tableData,
       theme: 'striped',
       headStyles: { fillColor: [5, 150, 105] }, // emerald-600
@@ -503,6 +526,181 @@ export default function Reports() {
 
   const { overallWastePercentage, totalCumulativeWaste, totalPatients } = calculateCumulativeWasteFromRecaps(patientRecaps);
 
+  const openEditGroupModal = (pr: any) => {
+    const foodCategories = [
+      'Makanan Pokok',
+      'Lauk Hewani',
+      'Lauk Nabati',
+      'Sayuran',
+      'Buah'
+    ];
+
+    const pKey = (pr.patientKey || pr.medicalRecordNumber || pr.patientName || '').trim().toLowerCase();
+    const pTxs = transactions.filter(t => 
+      (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() === pKey ||
+      (t.patientName || '').toLowerCase() === (pr.patientName || '').toLowerCase()
+    );
+
+    const defaultItems = foodCategories.map(cat => {
+      const existingItem = pTxs.find((it: Transaction) => 
+        (it.foodType || '').toLowerCase() === cat.toLowerCase()
+      );
+
+      if (existingItem) {
+        return {
+          id: existingItem.id,
+          foodType: cat,
+          mealTime: (existingItem.mealTime || 'makan_siang') as MealTime,
+          comstockScale: existingItem.comstockScale !== undefined && existingItem.comstockScale !== null ? existingItem.comstockScale : 0,
+          reason: existingItem.reason && existingItem.reason !== '-' ? existingItem.reason : '',
+          wasteWeight: existingItem.wasteWeight || 0,
+          consumptionWeight: existingItem.consumptionWeight || 400,
+          menuId: existingItem.menuId
+        };
+      } else {
+        const sampleItem = pTxs[0];
+        return {
+          id: `new_${cat.replace(/\s+/g, '_')}_${Date.now()}`,
+          foodType: cat,
+          mealTime: (sampleItem?.mealTime || 'makan_siang') as MealTime,
+          comstockScale: 0,
+          reason: '',
+          wasteWeight: 0,
+          consumptionWeight: 400,
+          menuId: sampleItem?.menuId
+        };
+      }
+    });
+
+    const ward = wards.find(w => w.name === pr.wardName || w.id === pr.wardId);
+
+    setEditingGroup({
+      key: pKey,
+      patientName: pr.patientName || '',
+      medicalRecordNumber: pr.medicalRecordNumber === '-' ? '' : (pr.medicalRecordNumber || ''),
+      patientGender: pr.patientGender || 'L',
+      patientAge: pr.patientAge || 0,
+      wardName: pr.wardName || ward?.name || 'Rawat Inap',
+      wardId: ward?.id || pr.wardId || '',
+      roomNumber: pr.roomNumber === '-' ? '' : (pr.roomNumber || ''),
+      dietType: pr.dietType || 'Biasa',
+      items: defaultItems
+    });
+  };
+
+  const handleSaveGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGroup) return;
+
+    setSavingGroup(true);
+    try {
+      const sampleTx = transactions.find(t => 
+        (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() === editingGroup.key ||
+        (t.patientName || '').toLowerCase() === editingGroup.patientName.toLowerCase()
+      );
+
+      const promises = editingGroup.items.map(async (item) => {
+        const scaleObj = COMSTOCK_VALUES.find(v => v.scale === item.comstockScale);
+        const stdW = 400;
+        const wasteWeight = scaleObj ? (stdW * (scaleObj.percentage / 100)) : 0;
+        const consumptionWeight = stdW - wasteWeight;
+
+        if (item.id.startsWith('new_')) {
+          const txRef = doc(collection(db, 'transactions'));
+          await setDoc(txRef, {
+            medicalRecordNumber: editingGroup.medicalRecordNumber || null,
+            patientName: editingGroup.patientName,
+            patientGender: editingGroup.patientGender || 'L',
+            patientAge: Number(editingGroup.patientAge) || 0,
+            wardName: editingGroup.wardName,
+            wardId: editingGroup.wardId || sampleTx?.wardId || wards[0]?.id || '',
+            roomNumber: editingGroup.roomNumber || null,
+            dietType: editingGroup.dietType || 'Biasa',
+            mealTime: item.mealTime || 'makan_siang',
+            foodType: item.foodType,
+            comstockScale: item.comstockScale,
+            wasteWeight,
+            consumptionWeight,
+            reason: item.reason || null,
+            staffId: profile?.id || sampleTx?.staffId || 'admin',
+            staffName: profile?.name || sampleTx?.staffName || 'Ahli Gizi',
+            staffInCharge: sampleTx?.staffInCharge || profile?.name || 'Ahli Gizi',
+            menuId: item.menuId || sampleTx?.menuId || menus[0]?.id || '',
+            timestamp: sampleTx?.timestamp || new Date()
+          });
+        } else {
+          const txRef = doc(db, 'transactions', item.id);
+          await updateDoc(txRef, {
+            medicalRecordNumber: editingGroup.medicalRecordNumber || null,
+            patientName: editingGroup.patientName,
+            patientGender: editingGroup.patientGender || 'L',
+            patientAge: Number(editingGroup.patientAge) || 0,
+            wardName: editingGroup.wardName,
+            wardId: editingGroup.wardId || sampleTx?.wardId || '',
+            roomNumber: editingGroup.roomNumber || null,
+            dietType: editingGroup.dietType || 'Biasa',
+            mealTime: item.mealTime || 'makan_siang',
+            foodType: item.foodType,
+            comstockScale: item.comstockScale,
+            wasteWeight,
+            consumptionWeight,
+            reason: item.reason || null
+          });
+        }
+      });
+
+      await Promise.all(promises);
+
+      setTransactions(prev => prev.map(t => {
+        const isMatch = (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() === editingGroup.key ||
+          (t.patientName || '').toLowerCase() === editingGroup.patientName.toLowerCase();
+
+        const updatedItem = editingGroup.items.find(it => it.id === t.id);
+
+        if (updatedItem) {
+          const scaleObj = COMSTOCK_VALUES.find(v => v.scale === updatedItem.comstockScale);
+          const stdW = 400;
+          const wasteWeight = scaleObj ? (stdW * (scaleObj.percentage / 100)) : 0;
+          const consumptionWeight = stdW - wasteWeight;
+
+          return {
+            ...t,
+            medicalRecordNumber: editingGroup.medicalRecordNumber,
+            patientName: editingGroup.patientName,
+            patientGender: editingGroup.patientGender as 'L' | 'P',
+            patientAge: Number(editingGroup.patientAge),
+            wardName: editingGroup.wardName,
+            roomNumber: editingGroup.roomNumber,
+            dietType: editingGroup.dietType,
+            foodType: updatedItem.foodType,
+            comstockScale: updatedItem.comstockScale,
+            wasteWeight,
+            consumptionWeight,
+            reason: updatedItem.reason
+          };
+        } else if (isMatch) {
+          return {
+            ...t,
+            medicalRecordNumber: editingGroup.medicalRecordNumber,
+            patientName: editingGroup.patientName,
+            patientGender: editingGroup.patientGender as 'L' | 'P',
+            patientAge: Number(editingGroup.patientAge),
+            wardName: editingGroup.wardName,
+            roomNumber: editingGroup.roomNumber,
+            dietType: editingGroup.dietType
+          };
+        }
+        return t;
+      }));
+
+      setEditingGroup(null);
+    } catch (err) {
+      console.error("Gagal menyimpan rekapitulasi pasien:", err);
+    } finally {
+      setSavingGroup(false);
+    }
+  };
+
   const handleSavePatientEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPatient) return;
@@ -511,7 +709,7 @@ export default function Reports() {
     try {
       const matchingTxs = transactions.filter(t => 
         (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() === editingPatient.patientKey ||
-        t.patientName.toLowerCase() === editingPatient.patientName.toLowerCase()
+        (t.patientName || '').toLowerCase() === (editingPatient?.patientName || '').toLowerCase()
       );
 
       const promises = matchingTxs.map(t => {
@@ -531,7 +729,7 @@ export default function Reports() {
 
       setTransactions(prev => prev.map(t => {
         const isMatch = (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() === editingPatient.patientKey ||
-          t.patientName.toLowerCase() === editingPatient.patientName.toLowerCase();
+          (t.patientName || '').toLowerCase() === (editingPatient?.patientName || '').toLowerCase();
         
         if (!isMatch) return t;
         return {
@@ -602,7 +800,7 @@ export default function Reports() {
       setLoading(true);
       const matchingTxs = transactions.filter(t => 
         (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() === patientKey ||
-        t.patientName.toLowerCase() === patientName.toLowerCase()
+        (t.patientName || '').toLowerCase() === (patientName || '').toLowerCase()
       );
 
       const promises = matchingTxs.map(t => deleteDoc(doc(db, 'transactions', t.id)));
@@ -610,7 +808,7 @@ export default function Reports() {
 
       setTransactions(prev => prev.filter(t => 
         (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() !== patientKey &&
-        t.patientName.toLowerCase() !== patientName.toLowerCase()
+        (t.patientName || '').toLowerCase() !== (patientName || '').toLowerCase()
       ));
     } catch (err) {
       console.error("Gagal menghapus data pasien:", err);
@@ -676,8 +874,8 @@ export default function Reports() {
       'Sisa Siang (%)': pr.siangPercent !== null ? pr.siangPercent.toFixed(1) + '%' : '-',
       'Sisa Malam (%)': pr.malamPercent !== null ? pr.malamPercent.toFixed(1) + '%' : '-',
       'Rata-rata Total (%)': pr.wastePercentage.toFixed(1) + '%',
-      'Sisa <= 25%': pr.wastePercentage <= 25 ? 'Ya' : 'Tidak',
-      'Status Efisiensi': pr.wastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
+      'Sisa <= 20%': pr.wastePercentage <= 20 ? 'Ya' : 'Tidak',
+      'Status Efisiensi': pr.wastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
     }));
 
     if (patientRecaps.length > 0) {
@@ -694,8 +892,8 @@ export default function Reports() {
         'Sisa Siang (%)': '-',
         'Sisa Malam (%)': '-',
         'Rata-rata Total (%)': `${overallWastePercentage.toFixed(1)}%`,
-        'Sisa <= 25%': overallWastePercentage <= 25 ? 'Ya' : 'Tidak',
-        'Status Efisiensi': overallWastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
+        'Sisa <= 20%': overallWastePercentage <= 20 ? 'Ya' : 'Tidak',
+        'Status Efisiensi': overallWastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
       });
     }
 
@@ -721,8 +919,8 @@ export default function Reports() {
     doc.setTextColor(100);
     doc.text(`Dicetak pada: ${printedAt} WITA`, 220, 22);
 
-    const efficientCount = patientRecaps.filter(p => p.wastePercentage <= 25).length;
-    const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 25).length;
+    const efficientCount = patientRecaps.filter(p => p.wastePercentage <= 20).length;
+    const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 20).length;
 
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'bold');
@@ -732,7 +930,7 @@ export default function Reports() {
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(71, 85, 105);
-    doc.text(`Total Pasien Ter-observasi: ${patientRecaps.length} Pasien | Sisa <= 25%: ${efficientCount} | Sisa > 25%: ${highWasteCount}`, 14, 32);
+    doc.text(`Total Pasien Ter-observasi: ${patientRecaps.length} Pasien | Sisa <= 20%: ${efficientCount} | Sisa > 20%: ${highWasteCount}`, 14, 32);
 
     const recapTableData: any[] = patientRecaps.map((pr, index) => [
       index + 1,
@@ -745,8 +943,8 @@ export default function Reports() {
       pr.siangPercent !== null ? `${pr.siangPercent.toFixed(1)}%` : '-',
       pr.malamPercent !== null ? `${pr.malamPercent.toFixed(1)}%` : '-',
       `${pr.wastePercentage.toFixed(1)}%`,
-      pr.wastePercentage <= 25 ? 'Ya' : 'Tidak',
-      pr.wastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
+      pr.wastePercentage <= 20 ? 'Ya' : 'Tidak',
+      pr.wastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
     ]);
 
     if (patientRecaps.length > 0) {
@@ -761,8 +959,8 @@ export default function Reports() {
         '-',
         '-',
         `${overallWastePercentage.toFixed(1)}%`,
-        overallWastePercentage <= 25 ? 'Ya' : 'Tidak',
-        overallWastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
+        overallWastePercentage <= 20 ? 'Ya' : 'Tidak',
+        overallWastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
       ]);
     }
 
@@ -780,7 +978,7 @@ export default function Reports() {
           'Sisa Siang',
           'Sisa Malam',
           'Rata-rata Total',
-          'Sisa <= 25%',
+          'Sisa <= 20%',
           'Status Efisiensi'
         ]
       ],
@@ -917,7 +1115,7 @@ export default function Reports() {
 
   const exportToExcel = () => {
     const data = patientRecaps.map((pr, index) => {
-      const isLE25 = pr.wastePercentage <= 25;
+      const isLE25 = pr.wastePercentage <= 20;
 
       return {
         'No.': index + 1,
@@ -932,8 +1130,8 @@ export default function Reports() {
         'Sisa Siang (%)': pr.siangPercent !== null ? `${pr.siangPercent.toFixed(1)}%` : '-',
         'Sisa Malam (%)': pr.malamPercent !== null ? `${pr.malamPercent.toFixed(1)}%` : '-',
         'Estimasi Sisa Makanan (%)': `${pr.wastePercentage.toFixed(1)}%`,
-        'Sisa <= 25%': isLE25 ? 'Ya' : 'Tidak',
-        'Status Efisiensi': isLE25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)',
+        'Sisa <= 20%': isLE25 ? 'Ya' : 'Tidak',
+        'Status Efisiensi': isLE25 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)',
         'Alasan Tidak Habis': pr.reasonsStr || '-',
         'Nama Ahli Gizi': pr.staffStr || 'Ahli Gizi'
       };
@@ -965,7 +1163,7 @@ export default function Reports() {
 
     // Tabel 1: Log Observasi Data Sisa Makanan Per Pasien (1 Pasien = 1 Baris)
     const tableData = patientRecaps.map((pr, index) => {
-      const isLE25 = pr.wastePercentage <= 25;
+      const isLE25 = pr.wastePercentage <= 20;
 
       return [
         index + 1,
@@ -995,7 +1193,7 @@ export default function Reports() {
           { content: 'Jenis Diet', rowSpan: 2 },
           { content: 'Metode Pengukuran\n(Comstock/Timbang)', rowSpan: 2 },
           { content: 'Estimasi Sisa\nMakanan (%)', rowSpan: 2 },
-          { content: 'Sisa <= 25%', colSpan: 2, styles: { halign: 'center' } },
+          { content: 'Sisa <= 20%', colSpan: 2, styles: { halign: 'center' } },
           { content: 'Alasan Tidak Habis', rowSpan: 2 },
           { content: 'Nama Ahli Gizi', rowSpan: 2 }
         ],
@@ -1054,13 +1252,13 @@ export default function Reports() {
     doc.setTextColor(15, 23, 42);
     doc.text(`REKAPITULASI SISA MAKANAN PASIEN (${monthYearFormatted.toUpperCase()})`, 14, recapStartY);
 
-    const efficientCount = patientRecaps.filter(p => p.wastePercentage <= 25).length;
-    const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 25).length;
+    const efficientCount = patientRecaps.filter(p => p.wastePercentage <= 20).length;
+    const highWasteCount = patientRecaps.filter(p => p.wastePercentage > 20).length;
 
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(71, 85, 105);
-    doc.text(`Total Pasien: ${patientRecaps.length} Pasien  |  Efisien (Sisa <= 25%): ${efficientCount} Pasien  |  Sisa Tinggi (> 25%): ${highWasteCount} Pasien`, 14, recapStartY + 6);
+    doc.text(`Total Pasien: ${patientRecaps.length} Pasien  |  Efisien (Sisa <= 20%): ${efficientCount} Pasien  |  Sisa Tinggi (> 20%): ${highWasteCount} Pasien`, 14, recapStartY + 6);
 
     const recapTableData = patientRecaps.map((pr, index) => [
       index + 1,
@@ -1072,8 +1270,8 @@ export default function Reports() {
       pr.siangPercent !== null ? `${pr.siangPercent.toFixed(1)}%` : '-',
       pr.malamPercent !== null ? `${pr.malamPercent.toFixed(1)}%` : '-',
       `${pr.wastePercentage.toFixed(1)}%`,
-      pr.wastePercentage <= 25 ? 'Ya' : 'Tidak',
-      pr.wastePercentage <= 25 ? 'Sesuai Standar (<=25%)' : 'Sisa Tinggi (>25%)'
+      pr.wastePercentage <= 20 ? 'Ya' : 'Tidak',
+      pr.wastePercentage <= 20 ? 'Sesuai Standar (<=20%)' : 'Sisa Tinggi (>20%)'
     ]);
 
     autoTable(doc, {
@@ -1089,7 +1287,7 @@ export default function Reports() {
           'Sisa Siang (%)',
           'Sisa Malam (%)',
           'Rata-rata Total (%)',
-          'Sisa <= 25%',
+          'Sisa <= 20%',
           'Status Efisiensi'
         ]
       ],
@@ -1459,7 +1657,7 @@ export default function Reports() {
                   </tr>
                 ) : (
                   patientRecaps.map(pr => {
-                    const isHighWaste = pr.wastePercentage > 25;
+                    const isHighWaste = pr.wastePercentage > 20;
                     return (
                       <tr key={pr.patientKey} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 font-mono font-bold text-slate-700">
@@ -1502,24 +1700,15 @@ export default function Reports() {
                             ? 'bg-rose-50 text-rose-600 border border-rose-200' 
                             : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
                           }`}>
-                            {isHighWaste ? 'Sisa Tinggi (>25%)' : 'Efisien (≤25%)'}
+                            {isHighWaste ? 'Sisa Tinggi (>20%)' : 'Efisien (≤20%)'}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right space-x-2">
                           <button
                             type="button"
-                            onClick={() => setEditingPatient({
-                              patientKey: pr.patientKey,
-                              medicalRecordNumber: pr.medicalRecordNumber === '-' ? '' : pr.medicalRecordNumber,
-                              patientName: pr.patientName,
-                              patientGender: pr.patientGender,
-                              patientAge: pr.patientAge,
-                              wardName: pr.wardName,
-                              roomNumber: pr.roomNumber === '-' ? '' : pr.roomNumber,
-                              dietType: pr.dietType
-                            })}
+                            onClick={() => openEditGroupModal(pr)}
                             className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition border border-slate-200"
-                            title="Edit Data Pasien"
+                            title="Edit Laporan Pasien & Sisa Makanan"
                           >
                             <Pencil size={14} />
                           </button>
@@ -1561,11 +1750,11 @@ export default function Reports() {
                   </td>
                   <td colSpan={2} className="px-6 py-4 text-center">
                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                      overallWastePercentage > 25 
+                      overallWastePercentage > 20 
                         ? 'bg-rose-100 text-rose-700 border border-rose-300' 
                         : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                     }`}>
-                      {overallWastePercentage > 25 ? 'Sisa Tinggi (>25%)' : 'Efisien (≤25%)'}
+                      {overallWastePercentage > 20 ? 'Sisa Tinggi (>20%)' : 'Efisien (≤20%)'}
                     </span>
                   </td>
                 </tr>
@@ -1807,6 +1996,239 @@ export default function Reports() {
         </div>
       )}
 
+      {/* Group / All Food Items Patient Edit Modal */}
+      {editingGroup && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] overflow-y-auto">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 15 }}
+            className="bg-white rounded-[2.5rem] border border-slate-200 w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col my-6 max-h-[90vh]"
+          >
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-8 py-6 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/10 rounded-2xl border border-white/20">
+                  <Pencil size={22} className="text-white" />
+                </div>
+                <div>
+                  <h4 className="font-display font-black text-lg">Edit Rekapitulasi Pasien</h4>
+                  <p className="text-xs text-emerald-100">Perbarui identitas & seluruh 5 komponen sisa makanan sekaligus</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setEditingGroup(null)}
+                className="p-2 hover:bg-white/10 rounded-xl transition cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGroup} className="p-6 space-y-6 overflow-y-auto flex-1">
+              {/* Patient Profile / Identity Section */}
+              <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200/80 space-y-4">
+                <h5 className="text-[11px] font-black text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <User size={14} className="text-emerald-600" />
+                  Identitas & Profil Pasien
+                </h5>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">No. Rekam Medis</label>
+                    <input 
+                      type="text"
+                      value={editingGroup.medicalRecordNumber}
+                      onChange={e => setEditingGroup({...editingGroup, medicalRecordNumber: e.target.value})}
+                      placeholder="RM-XXXXXX"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Nama Pasien</label>
+                    <input 
+                      type="text"
+                      value={editingGroup.patientName}
+                      onChange={e => setEditingGroup({...editingGroup, patientName: e.target.value})}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Jenis Kelamin</label>
+                    <select 
+                      value={editingGroup.patientGender}
+                      onChange={e => setEditingGroup({...editingGroup, patientGender: e.target.value})}
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                    >
+                      <option value="L">Laki-Laki (L)</option>
+                      <option value="P">Perempuan (P)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Umur (Thn)</label>
+                    <input 
+                      type="number"
+                      value={editingGroup.patientAge || ''}
+                      onChange={e => setEditingGroup({...editingGroup, patientAge: Number(e.target.value)})}
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Ruang Rawat</label>
+                    <input 
+                      type="text"
+                      value={editingGroup.wardName}
+                      onChange={e => setEditingGroup({...editingGroup, wardName: e.target.value})}
+                      placeholder="Mawar"
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">No. Kamar</label>
+                    <input 
+                      type="text"
+                      value={editingGroup.roomNumber}
+                      onChange={e => setEditingGroup({...editingGroup, roomNumber: e.target.value})}
+                      placeholder="102A"
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Jenis Diet</label>
+                  <input 
+                    type="text"
+                    value={editingGroup.dietType}
+                    onChange={e => setEditingGroup({...editingGroup, dietType: e.target.value})}
+                    placeholder="Makanan Biasa / Lunak"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                  />
+                </div>
+              </div>
+
+              {/* Food Items Comstock Edit Section */}
+              <div className="space-y-3">
+                <h5 className="text-[11px] font-black text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Utensils size={14} className="text-emerald-600" />
+                  Pilihan Sisa Makanan Comstock (5 Komponen Food)
+                </h5>
+
+                <div className="space-y-3">
+                  {editingGroup.items.map((item, idx) => (
+                    <div key={item.foodType} className="bg-slate-50 p-4 rounded-2xl border border-slate-200/70 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-800 flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-[10px] font-bold">
+                            {idx + 1}
+                          </span>
+                          {item.foodType}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-400">Waktu Makan:</span>
+                          <select
+                            value={item.mealTime}
+                            onChange={e => {
+                              const newTime = e.target.value as MealTime;
+                              setEditingGroup({
+                                ...editingGroup,
+                                items: editingGroup.items.map(it => it.foodType === item.foodType ? { ...it, mealTime: newTime } : it)
+                              });
+                            }}
+                            className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-700 outline-none"
+                          >
+                            <option value="sarapan">Sarapan</option>
+                            <option value="makan_siang">Makan Siang</option>
+                            <option value="makan_malam">Makan Malam</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Comstock Scale Buttons */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Skala Comstock</label>
+                        <div className="grid grid-cols-6 gap-1.5">
+                          {COMSTOCK_VALUES.map(v => {
+                            const isSelected = item.comstockScale === v.scale;
+                            return (
+                              <button
+                                key={v.scale}
+                                type="button"
+                                onClick={() => {
+                                  setEditingGroup({
+                                    ...editingGroup,
+                                    items: editingGroup.items.map(it => it.foodType === item.foodType ? { ...it, comstockScale: v.scale } : it)
+                                  });
+                                }}
+                                className={`py-2 px-1 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-102 font-black'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100 font-bold'
+                                }`}
+                              >
+                                <span className="text-xs">{v.scale}</span>
+                                <span className={`text-[8px] ${isSelected ? 'text-emerald-100' : 'text-slate-400'}`}>
+                                  {v.percentage}%
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Reason */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Alasan Sisa Makan</label>
+                        <select 
+                          value={item.reason}
+                          onChange={e => {
+                            const rVal = e.target.value;
+                            setEditingGroup({
+                              ...editingGroup,
+                              items: editingGroup.items.map(it => it.foodType === item.foodType ? { ...it, reason: rVal } : it)
+                            });
+                          }}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                        >
+                          <option value="">-- Tanpa Alasan / Habis --</option>
+                          <option value="Pasien tidak nafsu makan">Pasien tidak nafsu makan</option>
+                          <option value="Porsi terlalu besar">Porsi terlalu besar</option>
+                          <option value="Pasien pulang/tindakan medis">Pasien pulang/tindakan medis</option>
+                          <option value="Makanan dingin">Makanan dingin</option>
+                          <option value="Sensori / Rasa kurang cocok">Sensori / Rasa kurang cocok</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 sticky bottom-0 bg-white py-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingGroup(null)}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 transition rounded-xl font-bold text-slate-600 text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingGroup}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 transition rounded-xl font-bold text-white text-xs flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <Save size={14} />
+                  <span>{savingGroup ? 'Menyimpan...' : 'Simpan Semua Perubahan'}</span>
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
       {/* Single Transaction Edit Modal */}
       {editingSingleTx && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100] overflow-y-auto">
@@ -2013,7 +2435,7 @@ export default function Reports() {
         </div>
       )}      {/* Modern, gorgeous patient details description modal dialog overlay */}
       {selectedTx && (() => {
-        const pTxs = transactions.filter(t => t.patientName.toLowerCase() === selectedTx.patientName.toLowerCase());
+        const pTxs = transactions.filter(t => (t.patientName || '').toLowerCase() === (selectedTx?.patientName || '').toLowerCase());
         const patientWasteByFoodType = foodTypes.map(fType => {
           const matchingTxs = pTxs.filter(t => (t.foodType || 'Makanan Pokok') === fType);
           const totalWaste = matchingTxs.reduce((sum, t) => sum + t.wasteWeight, 0);
@@ -2195,7 +2617,7 @@ export default function Reports() {
                 <div className="space-y-2">
                   <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
                     <Info size={10} className="text-emerald-500" />
-                    Asesmen Porsi Sisa & Gramasi
+                    Asesmen Porsi Sisa Makanan
                   </h5>
                   <div className="bg-slate-50/50 p-5 rounded-3xl border border-slate-100 space-y-4">
                     {/* visual slider scale */}
@@ -2535,9 +2957,9 @@ export default function Reports() {
                           <strong className="text-sm font-black text-emerald-700">{overallWastePercentage.toFixed(1)}%</strong>
                         </div>
                         <div>
-                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Efisiensi (&lt;=25%)</span>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Efisiensi (&lt;=20%)</span>
                           <strong className="text-sm font-black text-slate-800">
-                            {patientRecaps.filter(p => p.wastePercentage <= 25).length} / {patientRecaps.length} Pasien
+                            {patientRecaps.filter(p => p.wastePercentage <= 20).length} / {patientRecaps.length} Pasien
                           </strong>
                         </div>
                       </div>
@@ -2577,8 +2999,8 @@ export default function Reports() {
                                   <td className="px-3 py-2 text-center font-mono">{p.malamPercent !== null ? `${p.malamPercent.toFixed(1)}%` : '-'}</td>
                                   <td className="px-3 py-2 text-center font-mono font-black text-emerald-700">{p.wastePercentage.toFixed(1)}%</td>
                                   <td className="px-3 py-2 text-center font-bold">
-                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${p.wastePercentage <= 25 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
-                                      {p.wastePercentage <= 25 ? 'Efisien' : 'Sisa Tinggi'}
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${p.wastePercentage <= 20 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                      {p.wastePercentage <= 20 ? 'Efisien' : 'Sisa Tinggi'}
                                     </span>
                                   </td>
                                 </tr>

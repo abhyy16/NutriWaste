@@ -566,7 +566,7 @@ export default function RecordWaste() {
                         onClick={() => setMealTime(m.id)}
                         className="w-full py-3 text-xs font-black rounded-xl transition-all bg-white text-emerald-800 shadow-sm"
                       >
-                        {m.label.toUpperCase()}
+                        {(m.label || '').toUpperCase()}
                       </button>
                     ))}
                   </div>

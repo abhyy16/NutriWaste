@@ -215,7 +215,7 @@ export function groupTransactionsByPatient(txs: Transaction[]): GroupedPatient[]
       avgWastePercentage = g.items.length > 0 ? sumPct / g.items.length : 0;
     }
 
-    const isHighWaste = avgWastePercentage > 25 || g.items.some(i => getTransactionWastePercentage(i) > 25);
+    const isHighWaste = avgWastePercentage > 20 || g.items.some(i => getTransactionWastePercentage(i) > 20);
 
     return {
       ...g,

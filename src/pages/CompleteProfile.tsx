@@ -89,7 +89,7 @@ export default function CompleteProfile() {
       let finalWardId = wardId;
       if (wardId === 'other_custom') {
         const cleanedName = customWardName.trim();
-        const existing = wards.find(w => w.name.toLowerCase() === cleanedName.toLowerCase());
+        const existing = wards.find(w => (w.name || "").toLowerCase() === cleanedName.toLowerCase());
         if (existing) {
           finalWardId = existing.id;
         } else {
