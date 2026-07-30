@@ -119,17 +119,14 @@ export default function Dashboard() {
   }, [profile]);
 
   const handleDelete = async (id: string) => {
-    if (deletingId !== id) {
-      setDeletingId(id);
-      setTimeout(() => setDeletingId(null), 3000);
-      return;
-    }
+    if (!window.confirm("Apakah Anda yakin ingin menghapus catatan sisa makanan ini?")) return;
 
     try {
       setError(null);
       await deleteDoc(doc(db, 'transactions', id));
       setTransactions(prev => prev.filter(t => t.id !== id));
       setDeletingId(null);
+      alert("Berhasil menghapus catatan sisa makanan.");
     } catch (err: any) {
       setError(err.message || 'Gagal menghapus data.');
       handleFirestoreError(err, OperationType.DELETE, `transactions/${id}`);

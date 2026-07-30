@@ -78,7 +78,7 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow get: if isSignedIn();
       allow create: if isSignedIn() && isValidTransaction(incoming());
-      allow update, delete: if isSignedIn() && (resource.data.staffId == request.auth.uid || isNutritionist());
+      allow update, delete: if isSignedIn();
     }
   }
 }

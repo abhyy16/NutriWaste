@@ -764,21 +764,32 @@ export default function Reports() {
     if (!window.confirm(`Apakah Anda yakin ingin menghapus SELURUH catatan transaksi sisa makanan untuk pasien "${patientName}"?`)) return;
     try {
       setLoading(true);
-      const matchingTxs = transactions.filter(t => 
-        (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() === patientKey ||
-        (t.patientName || '').toLowerCase() === (patientName || '').toLowerCase()
-      );
+      const searchKey = (patientKey || '').trim().toLowerCase();
+      const targetName = (patientName || '').trim().toLowerCase();
+
+      const matchingTxs = transactions.filter(t => {
+        const k = (t.medicalRecordNumber || t.patientName || 'Unknown').trim().toLowerCase();
+        const pName = (t.patientName || '').trim().toLowerCase();
+        return k === searchKey || (targetName !== '' && pName === targetName);
+      });
+
+      if (matchingTxs.length === 0) {
+        alert(`Tidak ada transaksi yang cocok ditemukan untuk pasien ${patientName}.`);
+        return;
+      }
 
       const promises = matchingTxs.map(t => deleteDoc(doc(db, 'transactions', t.id)));
       await Promise.all(promises);
 
-      setTransactions(prev => prev.filter(t => 
-        (t.medicalRecordNumber || t.patientName || '').trim().toLowerCase() !== patientKey &&
-        (t.patientName || '').toLowerCase() !== (patientName || '').toLowerCase()
-      ));
+      const deletedIds = new Set(matchingTxs.map(t => t.id));
+      setTransactions(prev => prev.filter(t => !deletedIds.has(t.id)));
+      if (selectedTx && deletedIds.has(selectedTx.id)) {
+        setSelectedTx(null);
+      }
+      alert(`Berhasil menghapus ${matchingTxs.length} catatan transaksi sisa makanan untuk pasien "${patientName}".`);
     } catch (err) {
       console.error("Gagal menghapus data pasien:", err);
-      alert("Gagal menghapus data pasien");
+      alert("Gagal menghapus data pasien. Silakan coba lagi.");
     } finally {
       setLoading(false);
     }
@@ -789,9 +800,13 @@ export default function Reports() {
     try {
       await deleteDoc(doc(db, 'transactions', txId));
       setTransactions(prev => prev.filter(t => t.id !== txId));
+      if (selectedTx?.id === txId) {
+        setSelectedTx(null);
+      }
+      alert("Berhasil menghapus catatan sisa makanan.");
     } catch (err) {
       console.error("Gagal menghapus transaksi:", err);
-      alert("Gagal menghapus transaksi");
+      alert("Gagal menghapus transaksi. Silakan coba lagi.");
     }
   };
 
@@ -2701,7 +2716,16 @@ export default function Reports() {
               </div>
 
               {/* Modal Footer */}
-              <div className="bg-slate-50 px-8 py-5 border-t border-slate-100 flex justify-end">
+              <div className="bg-slate-50 px-8 py-5 border-t border-slate-100 flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSingleTx(selectedTx.id)}
+                  className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition duration-150 rounded-xl font-bold text-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trash2 size={14} />
+                  <span>Hapus Rec. Ini</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setSelectedTx(null)}
