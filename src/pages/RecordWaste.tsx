@@ -281,9 +281,8 @@ export default function RecordWaste() {
       const finalWardName = wardName || selectedWardObj?.name || wardId;
 
       const promises = activeRecords.map(([fType, data]) => {
-        const scaleObj = COMSTOCK_VALUES.find(v => v.scale === data.comstockScale);
         const stdW = parseFloat(data.standardWeight) || 100;
-        const wasteWeight = scaleObj ? (stdW * (scaleObj.percentage / 100)) : 0;
+        const wasteWeight = data.comstockScale !== null ? (stdW * (data.comstockScale / 5)) : 0;
         const consumptionWeight = stdW - wasteWeight;
 
         return addDoc(collection(db, 'transactions'), {

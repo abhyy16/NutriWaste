@@ -142,12 +142,8 @@ export default function Dashboard() {
 
     try {
       setError(null);
-      const scale = COMSTOCK_VALUES.find(v => v.scale === editingTx.comstockScale);
-      
-      if (!scale) return;
-
       const weight = 400; // Standard fallback
-      const wasteWeight = weight * (scale.percentage / 100);
+      const wasteWeight = weight * (editingTx.comstockScale / 5);
       const consumptionWeight = weight - wasteWeight;
       const selectedWard = wards.find(w => w.id === editingTx.wardId);
 
@@ -231,9 +227,8 @@ export default function Dashboard() {
 
       await Promise.all(categories.map(async (cat) => {
         const itemData = editingGroup.itemsMap[cat];
-        const scaleObj = COMSTOCK_VALUES.find(v => v.scale === itemData.comstockScale) || COMSTOCK_VALUES[0];
         const weight = 400;
-        const wasteWeight = weight * (scaleObj.percentage / 100);
+        const wasteWeight = weight * (itemData.comstockScale / 5);
         const consumptionWeight = weight - wasteWeight;
         const finalReason = editingGroup.sharedReason || itemData.reason || null;
 

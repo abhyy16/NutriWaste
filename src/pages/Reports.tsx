@@ -569,9 +569,8 @@ export default function Reports() {
       );
 
       const promises = editingGroup.items.map(async (item) => {
-        const scaleObj = COMSTOCK_VALUES.find(v => v.scale === item.comstockScale);
         const stdW = 400;
-        const wasteWeight = scaleObj ? (stdW * (scaleObj.percentage / 100)) : 0;
+        const wasteWeight = item.comstockScale !== undefined && item.comstockScale !== null ? (stdW * (item.comstockScale / 5)) : 0;
         const consumptionWeight = stdW - wasteWeight;
 
         if (item.id.startsWith('new_')) {
@@ -627,9 +626,8 @@ export default function Reports() {
         const updatedItem = editingGroup.items.find(it => it.id === t.id);
 
         if (updatedItem) {
-          const scaleObj = COMSTOCK_VALUES.find(v => v.scale === updatedItem.comstockScale);
           const stdW = 400;
-          const wasteWeight = scaleObj ? (stdW * (scaleObj.percentage / 100)) : 0;
+          const wasteWeight = updatedItem.comstockScale !== undefined && updatedItem.comstockScale !== null ? (stdW * (updatedItem.comstockScale / 5)) : 0;
           const consumptionWeight = stdW - wasteWeight;
 
           return {
@@ -727,9 +725,8 @@ export default function Reports() {
 
     setSavingSingleTx(true);
     try {
-      const scaleObj = COMSTOCK_VALUES.find(v => v.scale === editingSingleTx.comstockScale);
       const stdW = (editingSingleTx.wasteWeight + editingSingleTx.consumptionWeight) || 400;
-      const wasteWeight = scaleObj ? (stdW * (scaleObj.percentage / 100)) : editingSingleTx.wasteWeight;
+      const wasteWeight = editingSingleTx.comstockScale !== undefined && editingSingleTx.comstockScale !== null ? (stdW * (editingSingleTx.comstockScale / 5)) : editingSingleTx.wasteWeight;
       const consumptionWeight = stdW - wasteWeight;
 
       const txRef = doc(db, 'transactions', editingSingleTx.id);

@@ -2,8 +2,7 @@ import { Transaction, COMSTOCK_VALUES } from '../types';
 
 export function getTransactionWastePercentage(t: Transaction): number {
   if (t.comstockScale !== undefined && t.comstockScale !== null) {
-    const scaleObj = COMSTOCK_VALUES.find(v => v.scale === t.comstockScale);
-    if (scaleObj) return scaleObj.percentage;
+    return (t.comstockScale / 5) * 100;
   }
   const totalWeight = (t.wasteWeight || 0) + (t.consumptionWeight || 0);
   if (totalWeight > 0) {
