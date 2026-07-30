@@ -98,10 +98,10 @@ export default function MenuCycle() {
       // Parse and dynamically populate cycle days from Firestore
       const fetchedDays = Object.keys(data).map(Number).sort((a, b) => a - b);
       if (fetchedDays.length > 0) {
-        const uniqueDays = Array.from(new Set([...Array.from({ length: 7 }, (_, i) => i + 1), ...fetchedDays])).sort((a, b) => a - b);
+        const uniqueDays = Array.from(new Set([...Array.from({ length: 10 }, (_, i) => i + 1), ...fetchedDays])).sort((a, b) => a - b);
         setDays(uniqueDays);
       } else {
-        setDays([1, 2, 3, 4, 5, 6, 7]);
+        setDays([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       }
 
       setCycleData(data);

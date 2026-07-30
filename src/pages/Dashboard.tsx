@@ -10,7 +10,7 @@ import {
   TrendingUp, Users, Utensils, AlertTriangle, Download, 
   Filter, Calendar, ChevronRight, Building2, Clock, User,
   Trash2, Pencil, X, Save, AlertCircle, Info, HelpCircle,
-  Search, RefreshCw, FileText, Database, ChevronDown, ChevronUp
+  Search, RefreshCw, FileText, Database, ChevronDown, ChevronUp, ClipboardCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
@@ -30,6 +30,7 @@ interface EditingGroupState {
   dietType: string;
   menuId: string;
   mealTime: string;
+  sharedReason: string;
   itemsMap: Record<string, {
     id?: string;
     foodType: string;
@@ -180,6 +181,7 @@ export default function Dashboard() {
     const itemsMap: Record<string, { id?: string; foodType: string; comstockScale: number; reason: string }> = {};
 
     const categories = ['Makanan Pokok', 'Lauk Hewani', 'Lauk Nabati', 'Sayuran', 'Buah'];
+    const sharedReason = gp.items.find(i => i.reason && i.reason !== '-')?.reason || '';
     
     categories.forEach(cat => {
       const existing = gp.items.find(i => (i.foodType || 'Makanan Pokok') === cat);
@@ -188,13 +190,13 @@ export default function Dashboard() {
           id: existing.id,
           foodType: cat,
           comstockScale: existing.comstockScale ?? 0,
-          reason: existing.reason || ''
+          reason: existing.reason || sharedReason
         };
       } else {
         itemsMap[cat] = {
           foodType: cat,
           comstockScale: 0,
-          reason: ''
+          reason: sharedReason
         };
       }
     });
@@ -211,6 +213,7 @@ export default function Dashboard() {
       dietType: gp.dietType || firstItem?.dietType || 'Biasa',
       menuId: firstItem?.menuId || 'manual',
       mealTime: firstItem?.mealTime || 'makan_siang',
+      sharedReason,
       itemsMap
     });
   };
@@ -232,6 +235,7 @@ export default function Dashboard() {
         const weight = 400;
         const wasteWeight = weight * (scaleObj.percentage / 100);
         const consumptionWeight = weight - wasteWeight;
+        const finalReason = editingGroup.sharedReason || itemData.reason || null;
 
         const payload = {
           medicalRecordNumber: editingGroup.medicalRecordNumber || null,
@@ -248,14 +252,14 @@ export default function Dashboard() {
           comstockScale: itemData.comstockScale,
           wasteWeight,
           consumptionWeight,
-          reason: itemData.reason || null,
+          reason: finalReason,
           updatedAt: serverTimestamp()
         };
 
         if (itemData.id) {
           const txRef = doc(db, 'transactions', itemData.id);
           await updateDoc(txRef, payload);
-        } else if (itemData.comstockScale > 0 || (itemData.reason && itemData.reason.trim())) {
+        } else if (itemData.comstockScale > 0 || (finalReason && finalReason.trim())) {
           await addDoc(collection(db, 'transactions'), {
             ...payload,
             staffId: profile?.id || 'staff1',
@@ -328,14 +332,10 @@ export default function Dashboard() {
     };
   });
 
-  // Alarms: Transactions with > 20% waste using synchronized percentage
-  const menuAlerts = displayedTransactions.filter(t => {
-     return getTransactionWastePercentage(t) > 20;
-  });
-
-  // Grouped Patients for Alerts and History cards (1 Card per Pasien)
-  const groupedAlertPatients = groupTransactionsByPatient(menuAlerts);
+  // Grouped Patients for History cards and Alerts (1 Card per Pasien)
   const groupedHistoryPatients = groupTransactionsByPatient(displayedTransactions);
+  const groupedAlertPatients = groupedHistoryPatients.filter(gp => gp.isHighWaste);
+  const menuAlerts = displayedTransactions.filter(t => getTransactionWastePercentage(t) > 20);
 
   const COLORS = ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#ecfdf5'];
 
@@ -585,17 +585,6 @@ export default function Dashboard() {
                      </div>
 
                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 flex-wrap">
-                       <button
-                         type="button"
-                         onClick={(e) => {
-                           e.stopPropagation();
-                           openEditGroupModal(gp);
-                         }}
-                         className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.98]"
-                       >
-                         <Pencil size={13} />
-                         <span>Edit Laporan Pasien</span>
-                       </button>
                        <div className="text-right">
                          <p className="text-xl font-black text-red-600 font-mono">{gp.avgWastePercentage.toFixed(0)}%</p>
                          <p className="text-[9px] font-bold text-red-500 uppercase tracking-tight">RATA-RATA SISA</p>
@@ -672,14 +661,6 @@ export default function Dashboard() {
 
                                      {(isOwner || isAdmin) && (
                                        <div className="flex items-center gap-1">
-                                         <button
-                                           type="button"
-                                           onClick={(e) => { e.stopPropagation(); setEditingTx(item); }}
-                                           className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition border border-transparent hover:border-emerald-100 cursor-pointer"
-                                           title="Edit Item Ini"
-                                         >
-                                           <Pencil size={13} />
-                                         </button>
                                          <button
                                            type="button"
                                            onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
@@ -1353,6 +1334,59 @@ export default function Dashboard() {
                       </span>
                     </div>
 
+                    {/* Single Unified Reason Field */}
+                    <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-200/80 space-y-2">
+                      <label className="text-[11px] font-black text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <ClipboardCheck size={14} className="text-emerald-600" />
+                        Alasan Sisa Makanan Pasien (Disatukan untuk Makanan Pokok, Lauk, Sayur & Buah)
+                      </label>
+                      <select
+                        value={editingGroup.sharedReason}
+                        onChange={e => {
+                          const newReason = e.target.value;
+                          const updatedItemsMap = { ...editingGroup.itemsMap };
+                          Object.keys(updatedItemsMap).forEach(k => {
+                            updatedItemsMap[k] = { ...updatedItemsMap[k], reason: newReason };
+                          });
+                          setEditingGroup({
+                            ...editingGroup,
+                            sharedReason: newReason,
+                            itemsMap: updatedItemsMap
+                          });
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-white border border-emerald-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                      >
+                        <option value="">-- Pilih Alasan Sisa Makanan Terpadu --</option>
+                        <option value="Pasien tidak nafsu makan">Pasien tidak nafsu makan</option>
+                        <option value="Porsi terlalu besar">Porsi terlalu besar</option>
+                        <option value="Pasien pulang/tindakan medis">Pasien pulang/tindakan medis</option>
+                        <option value="Makanan dingin">Makanan dingin</option>
+                        <option value="Sensori / Rasa kurang cocok">Sensori / Rasa kurang cocok</option>
+                        <option value="Lainnya">Lainnya (Ketik Manual)</option>
+                      </select>
+                      {editingGroup.sharedReason === 'Lainnya' && (
+                        <input
+                          type="text"
+                          placeholder="Tulis alasan sisa makanan secara manual..."
+                          onChange={e => {
+                            const customVal = e.target.value;
+                            const updatedItemsMap = { ...editingGroup.itemsMap };
+                            Object.keys(updatedItemsMap).forEach(k => {
+                              updatedItemsMap[k] = { ...updatedItemsMap[k], reason: customVal };
+                            });
+                            setEditingGroup({
+                              ...editingGroup,
+                              itemsMap: updatedItemsMap
+                            });
+                          }}
+                          className="w-full mt-2 px-3.5 py-2 bg-white border border-emerald-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                        />
+                      )}
+                      <p className="text-[10px] text-emerald-700/80 font-medium">
+                        * Alasan ini disatukan untuk seluruh 5 komponen hidangan pasien.
+                      </p>
+                    </div>
+
                     <div className="space-y-4">
                       {['Makanan Pokok', 'Lauk Hewani', 'Lauk Nabati', 'Sayuran', 'Buah'].map((fType) => {
                         const currentItem = editingGroup.itemsMap[fType] || { foodType: fType, comstockScale: 0, reason: '' };
@@ -1423,33 +1457,10 @@ export default function Dashboard() {
                               })}
                             </div>
 
-                            {currentScale > 0 && (
-                              <div className="pt-1">
-                                <select
-                                  value={currentItem.reason || ''}
-                                  onChange={e => {
-                                    setEditingGroup({
-                                      ...editingGroup,
-                                      itemsMap: {
-                                        ...editingGroup.itemsMap,
-                                        [fType]: {
-                                          ...currentItem,
-                                          reason: e.target.value
-                                        }
-                                      }
-                                    });
-                                  }}
-                                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-emerald-500"
-                                >
-                                  <option value="">-- Pilih Alasan Sisa Makan ({fType}) --</option>
-                                  <option value="Pasien tidak nafsu makan">Pasien tidak nafsu makan</option>
-                                  <option value="Porsi terlalu besar">Porsi terlalu besar</option>
-                                  <option value="Pasien pulang/tindakan medis">Pasien pulang/tindakan medis</option>
-                                  <option value="Makanan dingin">Makanan dingin</option>
-                                  <option value="Sensori / Rasa kurang cocok">Sensori / Rasa kurang cocok</option>
-                                </select>
-                              </div>
-                            )}
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/50">
+                              <span>Alasan Terpadu:</span>
+                              <span className="font-bold text-slate-700">{currentItem.reason || editingGroup.sharedReason || 'Tanpa Alasan / Habis'}</span>
+                            </div>
                           </div>
                         );
                       })}

@@ -3,13 +3,13 @@ import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, del
 import { db } from '../lib/firebase';
 import { Transaction, Menu, Ward, COMSTOCK_VALUES, MealTime } from '../types';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search, X, Info, FileText, Activity, ShieldCheck, ChevronDown, ChevronUp, Pencil, Edit3, Save, CheckCircle2, Trash2, AlertTriangle, Eye, FileSpreadsheet, Download, Maximize2, Minimize2, ExternalLink, Printer, ZoomIn, ZoomOut, RotateCcw, LayoutList } from 'lucide-react';
+import { FileDown, Table as TableIcon, Calendar, Clock, User, HardDrive, Utensils, BarChart2, Layers, Search, X, Info, FileText, Activity, ShieldCheck, ChevronDown, ChevronUp, Pencil, Edit3, Save, CheckCircle2, Trash2, AlertTriangle, Eye, FileSpreadsheet, Download, Maximize2, Minimize2, ExternalLink, Printer, ZoomIn, ZoomOut, RotateCcw, LayoutList, ClipboardCheck } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
-import { calculateCumulativeWasteFromRecaps, calculateCumulativeWasteFromTransactions } from '../lib/recap';
+import { calculateCumulativeWasteFromRecaps, calculateCumulativeWasteFromTransactions, getTransactionWastePercentage } from '../lib/recap';
 
 interface BarChartItem {
   label: string;
@@ -125,6 +125,7 @@ export default function Reports() {
     wardId: string;
     roomNumber: string;
     dietType: string;
+    sharedReason: string;
     items: {
       id: string;
       foodType: string;
@@ -261,20 +262,24 @@ export default function Reports() {
   const exportPatientToPDF = (patientName: string) => {
     const pTxs = transactions.filter(t => (t.patientName || '').toLowerCase() === (patientName || '').toLowerCase());
     const doc = new jsPDF('landscape');
-    doc.setFontSize(18);
-    doc.text(`Riwayat Sisa Makan: ${patientName}`, 14, 22);
-    doc.setFontSize(11);
+    const printedAt = format(new Date(), 'dd/MM/yyyy HH:mm:ss');
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`LAPORAN RIWAYAT SISA MAKANAN PASIEN: ${patientName.toUpperCase()}`, 14, 18);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
-    doc.text(`Dicetak pada: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 30);
+    doc.text(`Waktu Cetak / Input Realtime: ${printedAt} WITA`, 14, 25);
 
     const tableData = pTxs.map(t => {
       const ward = wards.find(w => w.id === t.wardId);
       const stdW = (t.wasteWeight + t.consumptionWeight) || 400;
       const wastePercent = ((t.wasteWeight / stdW) * 100).toFixed(0);
+      const txTime = t.timestamp?.toDate ? t.timestamp.toDate() : (t.timestamp instanceof Date ? t.timestamp : new Date());
 
       return [
-        format(t.timestamp || new Date(), 'dd/MM/yy HH:mm'),
-        ward?.name || '-',
+        format(txTime, 'dd/MM/yyyy HH:mm:ss'),
+        ward?.name || t.wardName || '-',
         t.roomNumber || '-',
         (t.mealTime || '').replace('_', ' ').toUpperCase(),
         t.foodType || 'Makanan Pokok',
@@ -285,12 +290,12 @@ export default function Reports() {
     });
 
     autoTable(doc, {
-      startY: 35,
-      head: [['Tanggal & Waktu', 'Unit', 'Kmr/Bed', 'Waktu Makan', 'Jenis', 'Skala & Sisa', 'Waste %', 'Alasan']],
+      startY: 30,
+      head: [['Waktu Input Realtime (Tanggal & Jam)', 'Unit/Bangsal', 'Kmr/Bed', 'Waktu Makan', 'Jenis Makanan', 'Skala & Sisa', 'Waste %', 'Alasan Sisa Makan']],
       body: tableData,
       theme: 'striped',
-      headStyles: { fillColor: [5, 150, 105] }, // emerald-600
-      styles: { fontSize: 9 }
+      headStyles: { fillColor: [5, 150, 105], fontStyle: 'bold', halign: 'center' }, // emerald-600
+      styles: { fontSize: 8.5, valign: 'middle' }
     });
 
     const filename = `Riwayat_Sisa_Makan_${patientName.replace(/\s+/g, '_')}_${selectedMonth}.pdf`;
@@ -369,24 +374,14 @@ export default function Reports() {
     roomNumber: string;
     dietType: string;
     totalAssessments: number;
-    totalComstockScore: number;
-    totalComstockMax: number;
+    totalPctSum: number;
     totalWasteWeight: number;
     totalServedWeight: number;
-    pagiScore: number;
-    pagiMax: number;
-    pagiWasteWeight: number;
-    pagiServedWeight: number;
+    pagiPctSum: number;
     pagiCount: number;
-    siangScore: number;
-    siangMax: number;
-    siangWasteWeight: number;
-    siangServedWeight: number;
+    siangPctSum: number;
     siangCount: number;
-    malamScore: number;
-    malamMax: number;
-    malamWasteWeight: number;
-    malamServedWeight: number;
+    malamPctSum: number;
     malamCount: number;
     reasonsSet: Set<string>;
     staffSet: Set<string>;
@@ -399,7 +394,7 @@ export default function Reports() {
     const key = (t.medicalRecordNumber || t.patientName || 'Unknown').trim().toLowerCase();
     const existing = patientRecapMap.get(key);
     const stdW = (t.wasteWeight + t.consumptionWeight) || 400;
-    const cScale = t.comstockScale !== undefined && t.comstockScale !== null ? t.comstockScale : 0;
+    const pct = getTransactionWastePercentage(t);
 
     const mt = (t.mealTime || '').toLowerCase();
     const isPagi = mt.includes('pagi') || mt.includes('sarapan');
@@ -429,24 +424,14 @@ export default function Reports() {
         roomNumber: t.roomNumber || '-',
         dietType: t.dietType || 'Biasa',
         totalAssessments: 1,
-        totalComstockScore: cScale,
-        totalComstockMax: 5,
-        totalWasteWeight: t.wasteWeight,
+        totalPctSum: pct,
+        totalWasteWeight: t.wasteWeight || 0,
         totalServedWeight: stdW,
-        pagiScore: isPagi ? cScale : 0,
-        pagiMax: isPagi ? 5 : 0,
-        pagiWasteWeight: isPagi ? t.wasteWeight : 0,
-        pagiServedWeight: isPagi ? stdW : 0,
+        pagiPctSum: isPagi ? pct : 0,
         pagiCount: isPagi ? 1 : 0,
-        siangScore: (!isPagi && !isMalam) ? cScale : 0,
-        siangMax: (!isPagi && !isMalam) ? 5 : 0,
-        siangWasteWeight: (!isPagi && !isMalam) ? t.wasteWeight : 0,
-        siangServedWeight: (!isPagi && !isMalam) ? stdW : 0,
+        siangPctSum: (!isPagi && !isMalam) ? pct : 0,
         siangCount: (!isPagi && !isMalam) ? 1 : 0,
-        malamScore: isMalam ? cScale : 0,
-        malamMax: isMalam ? 5 : 0,
-        malamWasteWeight: isMalam ? t.wasteWeight : 0,
-        malamServedWeight: isMalam ? stdW : 0,
+        malamPctSum: isMalam ? pct : 0,
         malamCount: isMalam ? 1 : 0,
         reasonsSet,
         staffSet,
@@ -456,9 +441,8 @@ export default function Reports() {
       });
     } else {
       existing.totalAssessments += 1;
-      existing.totalComstockScore += cScale;
-      existing.totalComstockMax += 5;
-      existing.totalWasteWeight += t.wasteWeight;
+      existing.totalPctSum += pct;
+      existing.totalWasteWeight += (t.wasteWeight || 0);
       existing.totalServedWeight += stdW;
 
       if (tReason && tReason !== '-') existing.reasonsSet.add(tReason);
@@ -467,49 +451,32 @@ export default function Reports() {
       if (tDate > existing.latestTimestamp) existing.latestTimestamp = tDate;
 
       if (isPagi) {
-        existing.pagiScore += cScale;
-        existing.pagiMax += 5;
-        existing.pagiWasteWeight += t.wasteWeight;
-        existing.pagiServedWeight += stdW;
+        existing.pagiPctSum += pct;
         existing.pagiCount += 1;
       } else if (isMalam) {
-        existing.malamScore += cScale;
-        existing.malamMax += 5;
-        existing.malamWasteWeight += t.wasteWeight;
-        existing.malamServedWeight += stdW;
+        existing.malamPctSum += pct;
         existing.malamCount += 1;
       } else {
-        existing.siangScore += cScale;
-        existing.siangMax += 5;
-        existing.siangWasteWeight += t.wasteWeight;
-        existing.siangServedWeight += stdW;
+        existing.siangPctSum += pct;
         existing.siangCount += 1;
       }
     }
   });
 
   const patientRecaps = Array.from(patientRecapMap.values()).map(pr => {
-    // Formula: (Total Comstock Score / [Total Items Evaluated * 5]) * 100%
-    const wastePercentage = pr.totalComstockMax > 0
-      ? (pr.totalComstockScore / pr.totalComstockMax) * 100
+    // Rata-rata persentase sisa makanan pasien dari transaksi yang dicatat
+    const wastePercentage = pr.totalAssessments > 0
+      ? pr.totalPctSum / pr.totalAssessments
       : (pr.totalServedWeight > 0 ? (pr.totalWasteWeight / pr.totalServedWeight) * 100 : 0);
 
-    const pagiPercent = pr.pagiCount > 0
-      ? (pr.pagiMax > 0 ? (pr.pagiScore / pr.pagiMax) * 100 : (pr.pagiServedWeight > 0 ? (pr.pagiWasteWeight / pr.pagiServedWeight) * 100 : 0))
-      : null;
-
-    const siangPercent = pr.siangCount > 0
-      ? (pr.siangMax > 0 ? (pr.siangScore / pr.siangMax) * 100 : (pr.siangServedWeight > 0 ? (pr.siangWasteWeight / pr.siangServedWeight) * 100 : 0))
-      : null;
-
-    const malamPercent = pr.malamCount > 0
-      ? (pr.malamMax > 0 ? (pr.malamScore / pr.malamMax) * 100 : (pr.malamServedWeight > 0 ? (pr.malamWasteWeight / pr.malamServedWeight) * 100 : 0))
-      : null;
+    const pagiPercent = pr.pagiCount > 0 ? pr.pagiPctSum / pr.pagiCount : null;
+    const siangPercent = pr.siangCount > 0 ? pr.siangPctSum / pr.siangCount : null;
+    const malamPercent = pr.malamCount > 0 ? pr.malamPctSum / pr.malamCount : null;
 
     const reasonsStr = Array.from(pr.reasonsSet).join(', ') || '-';
     const staffStr = Array.from(pr.staffSet).join(', ') || 'Ahli Gizi';
     const methodStr = Array.from(pr.methodsSet).join('/') || 'Comstock';
-    const latestDateStr = format(pr.latestTimestamp, 'dd/MM/yyyy');
+    const latestDateStr = format(pr.latestTimestamp, 'dd/MM/yyyy HH:mm:ss');
 
     return {
       ...pr,
@@ -573,6 +540,7 @@ export default function Reports() {
     });
 
     const ward = wards.find(w => w.name === pr.wardName || w.id === pr.wardId);
+    const initialReason = pTxs.find(t => t.reason && t.reason !== '-')?.reason || defaultItems.find(i => i.reason && i.reason !== '-')?.reason || '';
 
     setEditingGroup({
       key: pKey,
@@ -584,7 +552,8 @@ export default function Reports() {
       wardId: ward?.id || pr.wardId || '',
       roomNumber: pr.roomNumber === '-' ? '' : (pr.roomNumber || ''),
       dietType: pr.dietType || 'Biasa',
-      items: defaultItems
+      sharedReason: initialReason,
+      items: defaultItems.map(it => ({ ...it, reason: initialReason || it.reason }))
     });
   };
 
@@ -1144,7 +1113,7 @@ export default function Reports() {
   const exportToPDF = () => {
     const doc = new jsPDF('landscape');
     const monthYearFormatted = formatIndonesianMonth(selectedMonth);
-    const printedAt = format(new Date(), 'dd/MM/yyyy HH:mm');
+    const printedAt = format(new Date(), 'dd/MM/yyyy HH:mm:ss');
 
     // Title Header
     doc.setFontSize(14);
@@ -1159,7 +1128,7 @@ export default function Reports() {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(100);
-    doc.text(`Dicetak pada: ${printedAt} WITA`, 220, 22);
+    doc.text(`Dicetak Realtime: ${printedAt} WITA`, 210, 22);
 
     // Tabel 1: Log Observasi Data Sisa Makanan Per Pasien (1 Pasien = 1 Baris)
     const tableData = patientRecaps.map((pr, index) => {
@@ -1167,7 +1136,7 @@ export default function Reports() {
 
       return [
         index + 1,
-        pr.latestDateStr || format(new Date(), 'dd/MM/yyyy'),
+        pr.latestDateStr || format(new Date(), 'dd/MM/yyyy HH:mm:ss'),
         `${pr.patientName} (${pr.patientGender || '-'})`,
         pr.medicalRecordNumber || '-',
         pr.wardName || 'Rawat Inap',
@@ -1186,7 +1155,7 @@ export default function Reports() {
       head: [
         [
           { content: 'No.', rowSpan: 2 },
-          { content: 'Tanggal Observasi', rowSpan: 2 },
+          { content: 'Waktu Input Realtime\n(Tgl & Jam)', rowSpan: 2 },
           { content: 'Nama Pasien', rowSpan: 2 },
           { content: 'No. RM', rowSpan: 2 },
           { content: 'Ruang Rawat', rowSpan: 2 },
@@ -2111,6 +2080,51 @@ export default function Reports() {
                 </div>
               </div>
 
+              {/* Unified Reason Section */}
+              <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200/80 space-y-2">
+                <label className="text-[11px] font-black text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <ClipboardCheck size={14} className="text-emerald-600" />
+                  Alasan Sisa Makanan Pasien (Disatukan untuk Makanan Pokok, Lauk, Sayur & Buah)
+                </label>
+                <select 
+                  value={editingGroup.sharedReason}
+                  onChange={e => {
+                    const rVal = e.target.value;
+                    setEditingGroup({
+                      ...editingGroup,
+                      sharedReason: rVal,
+                      items: editingGroup.items.map(it => ({ ...it, reason: rVal }))
+                    });
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-white border border-emerald-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                >
+                  <option value="">-- Pilih Alasan Sisa Makanan Terpadu --</option>
+                  <option value="Pasien tidak nafsu makan">Pasien tidak nafsu makan</option>
+                  <option value="Porsi terlalu besar">Porsi terlalu besar</option>
+                  <option value="Pasien pulang/tindakan medis">Pasien pulang/tindakan medis</option>
+                  <option value="Makanan dingin">Makanan dingin</option>
+                  <option value="Sensori / Rasa kurang cocok">Sensori / Rasa kurang cocok</option>
+                  <option value="Lainnya">Lainnya (Ketik Manual)</option>
+                </select>
+                {editingGroup.sharedReason === 'Lainnya' && (
+                  <input
+                    type="text"
+                    placeholder="Tulis alasan sisa makanan secara manual..."
+                    onChange={e => {
+                      const customVal = e.target.value;
+                      setEditingGroup({
+                        ...editingGroup,
+                        items: editingGroup.items.map(it => ({ ...it, reason: customVal }))
+                      });
+                    }}
+                    className="w-full mt-2 px-3.5 py-2 bg-white border border-emerald-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                )}
+                <p className="text-[10px] text-emerald-700/80 font-medium">
+                  * Alasan ini disatukan untuk seluruh 5 komponen hidangan pasien.
+                </p>
+              </div>
+
               {/* Food Items Comstock Edit Section */}
               <div className="space-y-3">
                 <h5 className="text-[11px] font-black text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -2180,27 +2194,9 @@ export default function Reports() {
                         </div>
                       </div>
 
-                      {/* Reason */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Alasan Sisa Makan</label>
-                        <select 
-                          value={item.reason}
-                          onChange={e => {
-                            const rVal = e.target.value;
-                            setEditingGroup({
-                              ...editingGroup,
-                              items: editingGroup.items.map(it => it.foodType === item.foodType ? { ...it, reason: rVal } : it)
-                            });
-                          }}
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
-                        >
-                          <option value="">-- Tanpa Alasan / Habis --</option>
-                          <option value="Pasien tidak nafsu makan">Pasien tidak nafsu makan</option>
-                          <option value="Porsi terlalu besar">Porsi terlalu besar</option>
-                          <option value="Pasien pulang/tindakan medis">Pasien pulang/tindakan medis</option>
-                          <option value="Makanan dingin">Makanan dingin</option>
-                          <option value="Sensori / Rasa kurang cocok">Sensori / Rasa kurang cocok</option>
-                        </select>
+                      <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/50">
+                        <span>Alasan Terpadu:</span>
+                        <span className="font-bold text-slate-700">{item.reason || editingGroup.sharedReason || 'Tanpa Alasan / Habis'}</span>
                       </div>
                     </div>
                   ))}

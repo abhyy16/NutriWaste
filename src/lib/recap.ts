@@ -89,33 +89,31 @@ export function calculateCumulativeWasteFromTransactions(txs: Transaction[]): {
     };
   }
 
-  const patientMap = new Map<string, { totalScore: number; maxScore: number; totalWaste: number; totalServed: number }>();
+  const patientMap = new Map<string, { totalPctSum: number; count: number; totalWaste: number; totalServed: number }>();
 
   txs.forEach(t => {
     const key = (t.medicalRecordNumber || t.patientName || 'Unknown').trim().toLowerCase();
     const existing = patientMap.get(key);
-    const cScale = t.comstockScale !== undefined && t.comstockScale !== null ? t.comstockScale : 0;
+    const pct = getTransactionWastePercentage(t);
     const stdW = (t.wasteWeight + t.consumptionWeight) || 400;
 
     if (!existing) {
       patientMap.set(key, {
-        totalScore: cScale,
-        maxScore: 5,
-        totalWaste: t.wasteWeight,
+        totalPctSum: pct,
+        count: 1,
+        totalWaste: t.wasteWeight || 0,
         totalServed: stdW
       });
     } else {
-      existing.totalScore += cScale;
-      existing.maxScore += 5;
-      existing.totalWaste += t.wasteWeight;
+      existing.totalPctSum += pct;
+      existing.count += 1;
+      existing.totalWaste += (t.wasteWeight || 0);
       existing.totalServed += stdW;
     }
   });
 
   const patientPercentages = Array.from(patientMap.values()).map(p => {
-    return p.maxScore > 0
-      ? (p.totalScore / p.maxScore) * 100
-      : (p.totalServed > 0 ? (p.totalWaste / p.totalServed) * 100 : 0);
+    return p.count > 0 ? p.totalPctSum / p.count : 0;
   });
 
   const totalPatients = patientPercentages.length;
@@ -203,18 +201,8 @@ export function groupTransactionsByPatient(txs: Transaction[]): GroupedPatient[]
   });
 
   return Array.from(map.values()).map(g => {
-    let avgWastePercentage = 0;
-    const hasComstock = g.items.some(i => i.comstockScale !== undefined && i.comstockScale !== null);
-    
-    if (hasComstock) {
-      const totalScore = g.items.reduce((sum, item) => sum + (item.comstockScale !== undefined && item.comstockScale !== null ? item.comstockScale : 0), 0);
-      const maxScore = g.items.length * 5;
-      avgWastePercentage = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
-    } else {
-      const sumPct = g.items.reduce((sum, item) => sum + getTransactionWastePercentage(item), 0);
-      avgWastePercentage = g.items.length > 0 ? sumPct / g.items.length : 0;
-    }
-
+    const sumPct = g.items.reduce((sum, item) => sum + getTransactionWastePercentage(item), 0);
+    const avgWastePercentage = g.items.length > 0 ? sumPct / g.items.length : 0;
     const isHighWaste = avgWastePercentage > 20 || g.items.some(i => getTransactionWastePercentage(i) > 20);
 
     return {

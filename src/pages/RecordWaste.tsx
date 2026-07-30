@@ -31,6 +31,7 @@ export default function RecordWaste() {
   const [roomNumber, setRoomNumber] = useState('');
   const [staffInCharge, setStaffInCharge] = useState('');
   const [dietType, setDietType] = useState('Biasa');
+  const [customDietType, setCustomDietType] = useState('');
   const [wardId, setWardId] = useState(profile?.assignedWardId || '');
   const [cycleDay, setCycleDay] = useState<number>(1);
   const [mealTime, setMealTime] = useState<MealTime>('makan_siang');
@@ -294,8 +295,8 @@ export default function RecordWaste() {
           wardName: finalWardName,
           roomNumber: roomNumber || '-',
           staffInCharge: staffInCharge || '-',
-          dietType: dietType || 'Biasa',
-          mealTime: 'makan_siang', // Strict lunch measurement
+          dietType: dietType === 'Lainnya' ? (customDietType || 'Lainnya') : (dietType || 'Biasa'),
+          mealTime: mealTime,
           foodType: fType, // e.g., 'Makanan Pokok', 'Lauk Hewani', etc.
           menuId: menuId || 'manual',
           comstockScale: data.comstockScale,
@@ -340,6 +341,7 @@ export default function RecordWaste() {
     setRoomNumber('');
     setStaffInCharge('');
     setDietType('Biasa');
+    setCustomDietType('');
     // Ward is kept for session persistence
     setMenuId('');
     setFoodItems('');
@@ -526,47 +528,66 @@ export default function RecordWaste() {
                       onChange={(e) => setCycleDay(Number(e.target.value))}
                       className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800"
                     >
-                      {[1, 2, 3, 4, 5, 6, 7].map(d => (
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(d => (
                         <option key={d} value={d}>Hari ke-{d}</option>
                       ))}
                     </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Jenis Diet</label>
-                    <input
-                      type="text"
-                      list="diet-list"
-                      value={dietType}
-                      onChange={(e) => setDietType(e.target.value)}
-                      placeholder="Cth: Biasa, RD, RG"
-                      className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800 placeholder:text-slate-400"
-                    />
-                    <datalist id="diet-list">
-                      <option value="Biasa" />
-                      <option value="Lunak" />
-                      <option value="Saring" />
-                      <option value="RG (Rendah Garam)" />
-                      <option value="DM (Diabetes Melitus)" />
-                    </datalist>
+                    <div className="space-y-2">
+                      <select
+                        value={dietType}
+                        onChange={(e) => setDietType(e.target.value)}
+                        className="w-full px-4 py-4 rounded-2xl border border-slate-300/80 bg-white outline-none focus:ring-2 focus:ring-emerald-100 font-bold text-slate-800"
+                      >
+                        <option value="Biasa">Diet Biasa (Nasi)</option>
+                        <option value="Lunak">Diet Lunak (Bubur / Tim)</option>
+                        <option value="Saring">Diet Saring</option>
+                        <option value="Cair">Diet Cair</option>
+                        <option value="RG (Rendah Garam)">RG (Rendah Garam)</option>
+                        <option value="DM (Diabetes Melitus)">DM (Diabetes Melitus)</option>
+                        <option value="RP (Rendah Protein)">RP (Rendah Protein)</option>
+                        <option value="DJ (Diet Jantung)">DJ (Diet Jantung)</option>
+                        <option value="DH (Diet Hati)">DH (Diet Hati)</option>
+                        <option value="DL (Diet Lambung)">DL (Diet Lambung)</option>
+                        <option value="Lainnya">Lainnya (Ketik Manual)</option>
+                      </select>
+                      {dietType === 'Lainnya' && (
+                        <input
+                          type="text"
+                          value={customDietType}
+                          onChange={(e) => setCustomDietType(e.target.value)}
+                          placeholder="Tulis jenis diet khusus pasien..."
+                          className="w-full px-4 py-3 rounded-2xl border border-emerald-300 bg-emerald-50/50 outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-slate-800 text-sm"
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] font-bold text-slate-700 uppercase tracking-widest ml-1">Waktu Makan</label>
-                    <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full uppercase">Pengukuran Makan Siang</span>
+                    <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full uppercase">Pilih Waktu Makan</span>
                   </div>
-                  <div className="flex bg-slate-200/60 p-1.5 rounded-2xl overflow-x-auto no-scrollbar">
+                  <div className="grid grid-cols-3 bg-slate-200/60 p-1.5 rounded-2xl gap-1">
                     {([
-                      { id: 'makan_siang', label: 'Makan Siang (Sisa Makanan)' },
+                      { id: 'sarapan', label: 'Sarapan / Pagi' },
+                      { id: 'makan_siang', label: 'Makan Siang' },
+                      { id: 'makan_malam', label: 'Makan Malam' },
                     ] as { id: MealTime, label: string }[]).map(m => (
                       <button
                         key={m.id}
                         type="button"
                         onClick={() => setMealTime(m.id)}
-                        className="w-full py-3 text-xs font-black rounded-xl transition-all bg-white text-emerald-800 shadow-sm"
+                        className={`py-3 text-xs font-black rounded-xl transition-all cursor-pointer ${
+                          mealTime === m.id
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                        }`}
                       >
-                        {(m.label || '').toUpperCase()}
+                        {m.label.toUpperCase()}
                       </button>
                     ))}
                   </div>
