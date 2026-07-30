@@ -71,6 +71,13 @@ export function calculateCumulativeWasteFromRecaps(patientRecaps: { wastePercent
   };
 }
 
+export interface PatientWasteBreakdown {
+  patientName: string;
+  medicalRecordNumber: string;
+  avgWastePercentage: number;
+  txCount: number;
+}
+
 /**
  * Menghitung rekapitulasi kumulatif (%) langsung dari array transaksi.
  * Otomatis mengelompokkan per pasien terlebih dahulu lalu menghitung rata-rata kumulatifnya.
@@ -79,16 +86,18 @@ export function calculateCumulativeWasteFromTransactions(txs: Transaction[]): {
   overallWastePercentage: number;
   totalCumulativeWaste: number;
   totalPatients: number;
+  patientBreakdown: PatientWasteBreakdown[];
 } {
   if (!txs || txs.length === 0) {
     return {
       overallWastePercentage: 0,
       totalCumulativeWaste: 0,
-      totalPatients: 0
+      totalPatients: 0,
+      patientBreakdown: []
     };
   }
 
-  const patientMap = new Map<string, { totalPctSum: number; count: number; totalWaste: number; totalServed: number }>();
+  const patientMap = new Map<string, { patientName: string; medicalRecordNumber: string; totalPctSum: number; count: number; totalWaste: number; totalServed: number }>();
 
   txs.forEach(t => {
     const key = (t.medicalRecordNumber || t.patientName || 'Unknown').trim().toLowerCase();
@@ -98,6 +107,8 @@ export function calculateCumulativeWasteFromTransactions(txs: Transaction[]): {
 
     if (!existing) {
       patientMap.set(key, {
+        patientName: t.patientName || 'Pasien Tanpa Nama',
+        medicalRecordNumber: t.medicalRecordNumber || '-',
         totalPctSum: pct,
         count: 1,
         totalWaste: t.wasteWeight || 0,
@@ -111,28 +122,32 @@ export function calculateCumulativeWasteFromTransactions(txs: Transaction[]): {
     }
   });
 
-  const patientPercentages = Array.from(patientMap.values()).map(p => {
-    return p.count > 0 ? p.totalPctSum / p.count : 0;
-  });
+  const patientBreakdown: PatientWasteBreakdown[] = Array.from(patientMap.values()).map(p => ({
+    patientName: p.patientName,
+    medicalRecordNumber: p.medicalRecordNumber,
+    avgWastePercentage: p.count > 0 ? p.totalPctSum / p.count : 0,
+    txCount: p.count
+  }));
 
-  const totalPatients = patientPercentages.length;
+  const totalPatients = patientBreakdown.length;
 
-  // Validasi jika jumlah pasien = 0 (mencegah divide by zero)
   if (totalPatients === 0) {
     return {
       overallWastePercentage: 0,
       totalCumulativeWaste: 0,
-      totalPatients: 0
+      totalPatients: 0,
+      patientBreakdown: []
     };
   }
 
-  const totalCumulativeWaste = patientPercentages.reduce((acc, val) => acc + val, 0);
+  const totalCumulativeWaste = patientBreakdown.reduce((acc, p) => acc + p.avgWastePercentage, 0);
   const overallWastePercentage = totalCumulativeWaste / totalPatients;
 
   return {
     overallWastePercentage,
     totalCumulativeWaste,
-    totalPatients
+    totalPatients,
+    patientBreakdown
   };
 }
 

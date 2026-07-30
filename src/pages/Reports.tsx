@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Transaction, Menu, Ward, COMSTOCK_VALUES, MealTime } from '../types';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
@@ -11,10 +11,20 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
 import { calculateCumulativeWasteFromRecaps, calculateCumulativeWasteFromTransactions, getTransactionWastePercentage } from '../lib/recap';
 
+interface PatientWasteBreakdown {
+  patientName: string;
+  medicalRecordNumber: string;
+  avgWastePercentage: number;
+  txCount: number;
+}
+
 interface BarChartItem {
   label: string;
   percentage: number;
   count: number;
+  totalPatients: number;
+  totalCumulativeWaste: number;
+  patientBreakdown: PatientWasteBreakdown[];
 }
 
 function MiniBarChartCard({ title, data, maxItem, minItem, icon: Icon }: {
@@ -24,29 +34,72 @@ function MiniBarChartCard({ title, data, maxItem, minItem, icon: Icon }: {
   minItem: BarChartItem | null;
   icon: any;
 }) {
+  const [showFormulaModal, setShowFormulaModal] = useState(false);
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+
   return (
     <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200/85 shadow-[0_10px_30px_-15px_rgba(148,163,184,0.12)] flex flex-col space-y-5 transition-all duration-300 hover:shadow-[0_20px_45px_-12px_rgba(148,163,184,0.18)] hover:border-slate-350">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
         <div className="flex items-center gap-2.5">
           <div className="p-2.5 bg-[#f0fdf4] text-emerald-600 rounded-2xl border border-emerald-100">
             <Icon size={16} />
           </div>
-          <h4 className="font-display font-black text-slate-800 text-sm tracking-tight">{title}</h4>
+          <div>
+            <h4 className="font-display font-black text-slate-800 text-sm tracking-tight">{title}</h4>
+            <p className="text-[10px] text-slate-400 font-medium">Klik pada bar untuk lihat rincian rumus & asal nilai</p>
+          </div>
         </div>
-        <span className="text-[8px] font-black tracking-widest text-slate-400 bg-slate-100 px-2.5 py-1 rounded-md uppercase font-display">Bar Chart</span>
+        <button
+          type="button"
+          onClick={() => setShowFormulaModal(!showFormulaModal)}
+          className="flex items-center gap-1 text-[9px] font-black tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-2.5 py-1.5 rounded-xl uppercase font-display transition cursor-pointer"
+        >
+          <Info size={12} />
+          <span>Rumus Chart</span>
+        </button>
       </div>
 
-      <div className="flex-1 space-y-4 pt-1">
+      {showFormulaModal && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="bg-slate-900 text-slate-100 p-4 rounded-2xl text-xs space-y-2 border border-slate-800"
+        >
+          <div className="flex items-center justify-between">
+            <span className="font-black text-emerald-400 uppercase tracking-wider text-[10px] flex items-center gap-1 font-display">
+              <Activity size={12} /> Rumus Rekapitulasi Kumulatif Sisa Makanan
+            </span>
+            <button type="button" onClick={() => setShowFormulaModal(false)} className="text-slate-400 hover:text-white">
+              <X size={14} />
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-300 leading-relaxed">
+            Sesuai standar manajemen gizi RS, persentase waste tiap kategori dihitung dengan rumus:
+          </p>
+          <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-mono text-[11px] text-emerald-300 text-center font-bold">
+            Persentase Kategori (%) = (Σ Rata-rata Sisa Pasien) / (Jumlah Pasien Terlibat)
+          </div>
+          <p className="text-[10px] text-slate-400 italic">
+            Contoh Makanan Pokok: Pasien A (50%) + Pasien B (58%) = 108% total sisa. Dibagi 2 Pasien = 54.0%.
+          </p>
+        </motion.div>
+      )}
+
+      <div className="flex-1 space-y-3 pt-1">
         {data.map((item) => {
           const isMax = maxItem && maxItem.label === item.label && item.count > 0;
           const isMin = minItem && minItem.label === item.label && item.count > 0 && (maxItem ? maxItem.label !== minItem.label : true);
+          const isExpanded = expandedItem === item.label;
 
           return (
-            <div key={item.label} className="space-y-1.5">
+            <div key={item.label} className="bg-slate-50/60 p-3 rounded-2xl border border-slate-100 space-y-2 transition">
               <div className="flex justify-between items-center text-[11px] font-bold">
-                <span className="text-slate-600 flex items-center gap-1.5 font-display">
+                <span className="text-slate-700 flex items-center gap-1.5 font-display flex-wrap">
                   {item.label}
-                  <span className="text-[9px] text-slate-405 font-normal">({item.count}x)</span>
+                  <span className="text-[9.5px] text-slate-400 font-normal">
+                    ({item.count}x asesmen • {item.totalPatients || 0} pasien)
+                  </span>
                   {isMax && (
                     <span className="bg-rose-50 border border-rose-200 text-rose-600 text-[8px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-md">
                       Maks
@@ -58,11 +111,27 @@ function MiniBarChartCard({ title, data, maxItem, minItem, icon: Icon }: {
                     </span>
                   )}
                 </span>
-                <span className={`font-mono font-bold ${item.percentage > 20 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                  {item.percentage.toFixed(1)}%
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`font-mono font-black text-xs sm:text-sm ${item.percentage > 20 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {item.percentage.toFixed(1)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedItem(isExpanded ? null : item.label)}
+                    className="p-1 hover:bg-slate-200/60 rounded-lg transition text-slate-500 cursor-pointer flex items-center gap-0.5 text-[9.5px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100"
+                    title="Klik untuk lihat rincian kalkulasi"
+                  >
+                    <span>{isExpanded ? 'Tutup' : 'Asal Nilai'}</span>
+                    {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
+                </div>
               </div>
-              <div className="h-3 bg-slate-100 rounded-full overflow-hidden relative">
+
+              <div 
+                className="h-2.5 bg-slate-200/60 rounded-full overflow-hidden relative cursor-pointer" 
+                onClick={() => setExpandedItem(isExpanded ? null : item.label)}
+                title="Klik untuk lihat rincian kalkulasi"
+              >
                 <div 
                   className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${
                     item.percentage > 20 ? 'from-rose-500 to-amber-500' : 'from-emerald-500 to-teal-500'
@@ -70,6 +139,63 @@ function MiniBarChartCard({ title, data, maxItem, minItem, icon: Icon }: {
                   style={{ width: `${Math.min(item.percentage, 100)}%` }}
                 />
               </div>
+
+              {/* Step-by-step math calculation breakdown */}
+              {isExpanded && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="pt-2 border-t border-slate-200/80 space-y-2 text-[10.5px] text-slate-600"
+                >
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <p className="font-black text-slate-800 flex items-center gap-1 uppercase tracking-wider text-[9.5px] font-display">
+                        <Activity size={12} className="text-emerald-600" />
+                        Rincian Perhitungan: {item.label}
+                      </p>
+                      <span className="text-[9px] font-mono text-slate-400">Step-by-Step</span>
+                    </div>
+
+                    {item.patientBreakdown && item.patientBreakdown.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="font-bold text-slate-500 text-[9px] uppercase tracking-wider">
+                          1. Rata-Rata Sisa per Pasien ({item.totalPatients} Pasien Terlibat):
+                        </p>
+                        <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                          {item.patientBreakdown.map((p, idx) => (
+                            <div key={idx} className="flex justify-between items-center text-[10px] bg-slate-50 p-1.5 rounded-lg border border-slate-150">
+                              <span className="font-bold text-slate-700 truncate max-w-[180px]">
+                                {p.patientName} <span className="text-slate-400 font-normal">(RM: {p.medicalRecordNumber})</span>
+                              </span>
+                              <span className="font-mono font-bold text-slate-800 shrink-0">
+                                {p.avgWastePercentage.toFixed(1)}% <span className="text-slate-400 font-normal">({p.txCount}x)</span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 space-y-1 font-mono text-[10px]">
+                          <div className="flex justify-between text-slate-600">
+                            <span>2. Total Kumulatif Sisa:</span>
+                            <span className="font-bold">{item.totalCumulativeWaste?.toFixed(1) || '0.0'}%</span>
+                          </div>
+                          <div className="flex justify-between text-slate-600">
+                            <span>3. Jumlah Pasien:</span>
+                            <span className="font-bold">{item.totalPatients} orang</span>
+                          </div>
+                          <div className="flex justify-between items-center pt-1.5 border-t border-slate-200 text-emerald-800 font-black text-[11px] bg-emerald-50/80 p-2 rounded-lg">
+                            <span>Hasil: ({item.totalCumulativeWaste?.toFixed(1) || '0.0'}% ÷ {item.totalPatients})</span>
+                            <span className="text-emerald-700 text-xs font-black">{item.percentage.toFixed(1)}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-slate-400 italic text-[10px]">Belum ada data pasien pada kategori ini.</p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
             </div>
           );
         })}
@@ -303,45 +429,59 @@ export default function Reports() {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const start = startOfMonth(parseISO(selectedMonth + '-01'));
-        const end = endOfMonth(start);
+    setLoading(true);
 
-        const q = query(
-          collection(db, 'transactions'), 
-          where('timestamp', '>=', start),
-          where('timestamp', '<=', end)
-        );
+    const unsubTx = onSnapshot(collection(db, 'transactions'), (snapshot) => {
+      const txs = snapshot.docs.map(d => {
+        const data = d.data();
+        let ts: Date | undefined = undefined;
+        if (data.timestamp?.toDate) {
+          ts = data.timestamp.toDate();
+        } else if (data.timestamp) {
+          ts = new Date(data.timestamp);
+        } else {
+          ts = new Date();
+        }
+        return {
+          id: d.id,
+          ...data,
+          timestamp: ts
+        } as Transaction;
+      }).sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0));
 
-        const tSnap = await getDocs(q);
-        
-        const txs = tSnap.docs.map(d => ({ 
-          id: d.id, 
-          ...d.data(),
-          timestamp: d.data().timestamp?.toDate() 
-        } as Transaction)).sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0));
+      setTransactions(txs);
+      setLoading(false);
+    }, (err) => {
+      console.error("Error subscribing to transactions:", err);
+      setLoading(false);
+    });
 
-        setTransactions(txs);
+    const unsubMenus = onSnapshot(collection(db, 'menus'), (snapshot) => {
+      setMenus(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Menu)));
+    });
 
-        const [mSnap, wSnap] = await Promise.all([
-          getDocs(collection(db, 'menus')),
-          getDocs(collection(db, 'wards'))
-        ]);
+    const unsubWards = onSnapshot(collection(db, 'wards'), (snapshot) => {
+      setWards(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Ward)));
+    });
 
-        setMenus(mSnap.docs.map(d => ({ id: d.id, ...d.data() } as Menu)));
-        setWards(wSnap.docs.map(d => ({ id: d.id, ...d.data() } as Ward)));
-      } catch (err) {
-        console.error("Error fetching report data:", err);
-      } finally {
-        setLoading(false);
-      }
+    return () => {
+      unsubTx();
+      unsubMenus();
+      unsubWards();
     };
-    fetchData();
-  }, [selectedMonth]);
+  }, []);
 
-  const filteredTransactions = transactions.filter(t => {
+  const monthTransactions = transactions.filter(t => {
+    if (!t.timestamp) return true;
+    try {
+      const tMonth = format(t.timestamp, 'yyyy-MM');
+      return tMonth === selectedMonth;
+    } catch {
+      return true;
+    }
+  });
+
+  const filteredTransactions = monthTransactions.filter(t => {
     if (t.foodType === 'Semua (Komposit)') return false;
     const nameMatch = searchQuery === '' || (t.patientName || '').toLowerCase().includes(searchQuery.toLowerCase());
     const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
@@ -388,6 +528,7 @@ export default function Reports() {
     methodsSet: Set<string>;
     latestTimestamp: Date;
     sampleTx: Transaction;
+    txIds: string[];
   }>();
 
   filteredTransactions.forEach(t => {
@@ -437,13 +578,15 @@ export default function Reports() {
         staffSet,
         methodsSet,
         latestTimestamp: tDate,
-        sampleTx: t
+        sampleTx: t,
+        txIds: [t.id]
       });
     } else {
       existing.totalAssessments += 1;
       existing.totalPctSum += pct;
       existing.totalWasteWeight += (t.wasteWeight || 0);
       existing.totalServedWeight += stdW;
+      existing.txIds.push(t.id);
 
       if (tReason && tReason !== '-') existing.reasonsSet.add(tReason);
       if (tStaff && tStaff !== '-') existing.staffSet.add(tStaff);
@@ -760,33 +903,40 @@ export default function Reports() {
     }
   };
 
-  const handleDeletePatient = async (patientKey: string, patientName: string) => {
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus SELURUH catatan transaksi sisa makanan untuk pasien "${patientName}"?`)) return;
-    try {
-      setLoading(true);
+  const handleDeletePatient = async (patientName: string, txIds?: string[], patientKey?: string) => {
+    let targetIds: string[] = txIds || [];
+    if (!targetIds || targetIds.length === 0) {
       const searchKey = (patientKey || '').trim().toLowerCase();
       const targetName = (patientName || '').trim().toLowerCase();
-
-      const matchingTxs = transactions.filter(t => {
+      targetIds = transactions.filter(t => {
         const k = (t.medicalRecordNumber || t.patientName || 'Unknown').trim().toLowerCase();
+        const mr = (t.medicalRecordNumber || '').trim().toLowerCase();
         const pName = (t.patientName || '').trim().toLowerCase();
-        return k === searchKey || (targetName !== '' && pName === targetName);
-      });
+        return (
+          (searchKey !== '' && searchKey !== 'unknown' && searchKey !== '-' && (k === searchKey || mr === searchKey)) ||
+          (targetName !== '' && pName === targetName)
+        );
+      }).map(t => t.id);
+    }
 
-      if (matchingTxs.length === 0) {
-        alert(`Tidak ada transaksi yang cocok ditemukan untuk pasien ${patientName}.`);
-        return;
-      }
+    if (targetIds.length === 0) {
+      alert(`Tidak ada transaksi yang dapat ditemukan untuk pasien "${patientName}".`);
+      return;
+    }
 
-      const promises = matchingTxs.map(t => deleteDoc(doc(db, 'transactions', t.id)));
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus SELURUH ${targetIds.length} catatan laporan sisa makanan untuk pasien "${patientName}"?\n\nData yang telah dihapus tidak dapat dikembalikan.`)) return;
+
+    try {
+      setLoading(true);
+      const promises = targetIds.map(id => deleteDoc(doc(db, 'transactions', id)));
       await Promise.all(promises);
 
-      const deletedIds = new Set(matchingTxs.map(t => t.id));
+      const deletedIds = new Set(targetIds);
       setTransactions(prev => prev.filter(t => !deletedIds.has(t.id)));
       if (selectedTx && deletedIds.has(selectedTx.id)) {
         setSelectedTx(null);
       }
-      alert(`Berhasil menghapus ${matchingTxs.length} catatan transaksi sisa makanan untuk pasien "${patientName}".`);
+      alert(`Berhasil menghapus ${targetIds.length} catatan laporan sisa makanan untuk pasien "${patientName}".`);
     } catch (err) {
       console.error("Gagal menghapus data pasien:", err);
       alert("Gagal menghapus data pasien. Silakan coba lagi.");
@@ -795,9 +945,37 @@ export default function Reports() {
     }
   };
 
+  const handleDeleteFilteredReports = async () => {
+    if (filteredTransactions.length === 0) {
+      alert("Tidak ada data laporan yang sesuai filter saat ini.");
+      return;
+    }
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus SELURUH ${filteredTransactions.length} data laporan yang sedang tampil di filter ini?\n\nTindakan ini akan menghapus permanen data tersebut dari database.`)) return;
+
+    try {
+      setLoading(true);
+      const idsToDelete = filteredTransactions.map(t => t.id);
+      const promises = idsToDelete.map(id => deleteDoc(doc(db, 'transactions', id)));
+      await Promise.all(promises);
+
+      const deletedSet = new Set(idsToDelete);
+      setTransactions(prev => prev.filter(t => !deletedSet.has(t.id)));
+      if (selectedTx && deletedSet.has(selectedTx.id)) {
+        setSelectedTx(null);
+      }
+      alert(`Berhasil menghapus ${idsToDelete.length} data laporan.`);
+    } catch (err) {
+      console.error("Gagal menghapus data laporan:", err);
+      alert("Gagal menghapus data laporan. Silakan coba lagi.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteSingleTx = async (txId: string) => {
     if (!window.confirm("Apakah Anda yakin ingin menghapus catatan sisa makanan ini?")) return;
     try {
+      setLoading(true);
       await deleteDoc(doc(db, 'transactions', txId));
       setTransactions(prev => prev.filter(t => t.id !== txId));
       if (selectedTx?.id === txId) {
@@ -807,6 +985,8 @@ export default function Reports() {
     } catch (err) {
       console.error("Gagal menghapus transaksi:", err);
       alert("Gagal menghapus transaksi. Silakan coba lagi.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1008,7 +1188,7 @@ export default function Reports() {
 
   // Helper to filter transactions for specific charts with partial filter exclusion
   const getFilteredForChart = (excludeFilter: 'foodType' | 'mealTime' | 'dayOfWeek' | 'cycleDay') => {
-    return transactions.filter(t => {
+    return monthTransactions.filter(t => {
       if (t.foodType === 'Semua (Komposit)') return false;
       const wardMatch = selectedWard === 'all' || t.wardId === selectedWard;
       
@@ -1034,8 +1214,15 @@ export default function Reports() {
 
   const wasteByFoodType = foodTypes.map(fType => {
     const matchingTxs = getFilteredForChart('foodType').filter(t => (t.foodType || 'Makanan Pokok') === fType);
-    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(matchingTxs);
-    return { label: fType, percentage: Math.min(overallWastePercentage, 100), count: matchingTxs.length };
+    const { overallWastePercentage, totalPatients, totalCumulativeWaste, patientBreakdown } = calculateCumulativeWasteFromTransactions(matchingTxs);
+    return {
+      label: fType,
+      percentage: Math.min(overallWastePercentage, 100),
+      count: matchingTxs.length,
+      totalPatients,
+      totalCumulativeWaste,
+      patientBreakdown
+    };
   });
 
   const activeFoodTypes = wasteByFoodType.filter(item => item.count > 0);
@@ -1050,8 +1237,15 @@ export default function Reports() {
 
   const wasteByMealTime = mealTimesList.map(mt => {
     const matchingTxs = getFilteredForChart('mealTime').filter(t => t.mealTime === mt.value);
-    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(matchingTxs);
-    return { label: mt.label, percentage: Math.min(overallWastePercentage, 100), count: matchingTxs.length };
+    const { overallWastePercentage, totalPatients, totalCumulativeWaste, patientBreakdown } = calculateCumulativeWasteFromTransactions(matchingTxs);
+    return {
+      label: mt.label,
+      percentage: Math.min(overallWastePercentage, 100),
+      count: matchingTxs.length,
+      totalPatients,
+      totalCumulativeWaste,
+      patientBreakdown
+    };
   });
 
   const activeMealTimes = wasteByMealTime.filter(item => item.count > 0);
@@ -1073,8 +1267,15 @@ export default function Reports() {
       const tDay = t.timestamp ? t.timestamp.getDay() : -1;
       return tDay === d.value;
     });
-    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(matchingTxs);
-    return { label: d.label, percentage: Math.min(overallWastePercentage, 100), count: matchingTxs.length };
+    const { overallWastePercentage, totalPatients, totalCumulativeWaste, patientBreakdown } = calculateCumulativeWasteFromTransactions(matchingTxs);
+    return {
+      label: d.label,
+      percentage: Math.min(overallWastePercentage, 100),
+      count: matchingTxs.length,
+      totalPatients,
+      totalCumulativeWaste,
+      patientBreakdown
+    };
   });
 
   const activeDays = wasteByDay.filter(item => item.count > 0);
@@ -1086,8 +1287,15 @@ export default function Reports() {
   const wasteByCycle = cycleDays.map(cd => {
     const matchingMenuIds = menus.filter(m => m.cycleDay === cd).map(m => m.id);
     const matchingTxs = getFilteredForChart('cycleDay').filter(t => matchingMenuIds.includes(t.menuId));
-    const { overallWastePercentage } = calculateCumulativeWasteFromTransactions(matchingTxs);
-    return { label: `Hari ${cd}`, percentage: Math.min(overallWastePercentage, 100), count: matchingTxs.length };
+    const { overallWastePercentage, totalPatients, totalCumulativeWaste, patientBreakdown } = calculateCumulativeWasteFromTransactions(matchingTxs);
+    return {
+      label: `Hari ${cd}`,
+      percentage: Math.min(overallWastePercentage, 100),
+      count: matchingTxs.length,
+      totalPatients,
+      totalCumulativeWaste,
+      patientBreakdown
+    };
   });
 
   const activeCycles = wasteByCycle.filter(item => item.count > 0);
@@ -1521,35 +1729,64 @@ export default function Reports() {
 
       {/* Four Visual Bar Charts showing food waste percentage configurations - hidden during search */}
       {!searchQuery && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <MiniBarChartCard 
-            title="Waste per Jenis Makanan" 
-            data={wasteByFoodType} 
-            maxItem={maxFoodType} 
-            minItem={minFoodType} 
-            icon={Utensils} 
-          />
-          <MiniBarChartCard 
-            title="Waste per Waktu Makan" 
-            data={wasteByMealTime} 
-            maxItem={maxMealTime} 
-            minItem={minMealTime} 
-            icon={Clock} 
-          />
-          <MiniBarChartCard 
-            title="Waste per Hari" 
-            data={wasteByDay} 
-            maxItem={maxDay} 
-            minItem={minDay} 
-            icon={Calendar} 
-          />
-          <MiniBarChartCard 
-            title="Waste per Hari Siklus" 
-            data={wasteByCycle} 
-            maxItem={maxCycle} 
-            minItem={minCycle} 
-            icon={Layers} 
-          />
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-5 sm:p-6 rounded-[2.5rem] border border-emerald-800/80 shadow-lg space-y-3">
+            <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-emerald-500/20 rounded-2xl border border-emerald-400/30 text-emerald-300">
+                  <Activity size={20} />
+                </div>
+                <div>
+                  <h4 className="font-display font-black text-sm sm:text-base text-white">Transparansi Perhitungan & Asal Usul Nilai Chart</h4>
+                  <p className="text-xs text-emerald-200/80">Rincian matematis bagaimana setiap nilai persentase (%) pada chart dihasilkan</p>
+                </div>
+              </div>
+              <span className="px-3 py-1.5 bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 rounded-xl text-[11px] font-mono font-bold whitespace-nowrap">
+                Persentase (%) = (Σ Rata2 Sisa Pasien) / N Pasien
+              </span>
+            </div>
+
+            <div className="bg-white/10 p-3.5 sm:p-4 rounded-2xl backdrop-blur-md text-xs text-emerald-100 space-y-2 border border-white/10">
+              <p className="leading-relaxed text-[11.5px]">
+                <strong>Metode Perhitungan Akurat:</strong> Nilai kategori (misal <span className="text-amber-300 font-bold">Makanan Pokok = 54.0%</span>) dihitung dengan menjumlahkan rata-rata persentase sisa makanan setiap pasien yang dikaji, lalu dibagi total <strong>Jumlah Pasien Terlibat</strong>.
+              </p>
+              <div className="flex items-center gap-2 text-[11px] text-emerald-200 font-mono">
+                <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                <span><strong>Contoh Real:</strong> Supri (50%) + Ani (58%) = 108% Total Sisa ÷ 2 Pasien = <strong>54.0%</strong>. Klik tombol <strong>"Asal Nilai"</strong> di tiap bar untuk rincian pasien!</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <MiniBarChartCard 
+              title="Waste per Jenis Makanan" 
+              data={wasteByFoodType} 
+              maxItem={maxFoodType} 
+              minItem={minFoodType} 
+              icon={Utensils} 
+            />
+            <MiniBarChartCard 
+              title="Waste per Waktu Makan" 
+              data={wasteByMealTime} 
+              maxItem={maxMealTime} 
+              minItem={minMealTime} 
+              icon={Clock} 
+            />
+            <MiniBarChartCard 
+              title="Waste per Hari" 
+              data={wasteByDay} 
+              maxItem={maxDay} 
+              minItem={minDay} 
+              icon={Calendar} 
+            />
+            <MiniBarChartCard 
+              title="Waste per Hari Siklus" 
+              data={wasteByCycle} 
+              maxItem={maxCycle} 
+              minItem={minCycle} 
+              icon={Layers} 
+            />
+          </div>
         </div>
       )}
 
@@ -1584,6 +1821,16 @@ export default function Reports() {
 
            {viewTab === 'rekap_pasien' && (
              <div className="flex items-center gap-2">
+               <button
+                 type="button"
+                 onClick={handleDeleteFilteredReports}
+                 disabled={filteredTransactions.length === 0}
+                 className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold hover:bg-rose-100 transition shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                 title="Hapus seluruh laporan yang tampil di filter saat ini untuk buat ulang"
+               >
+                 <Trash2 size={14} />
+                 <span>Hapus Filtered</span>
+               </button>
                <button
                  type="button"
                  onClick={exportPatientRecapToExcel}
@@ -1687,24 +1934,24 @@ export default function Reports() {
                         <td className="px-6 py-4 text-right space-x-2">
                           <button
                             type="button"
-                            onClick={() => openEditGroupModal(pr)}
-                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition border border-slate-200"
+                            onClick={(e) => { e.stopPropagation(); openEditGroupModal(pr); }}
+                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition border border-slate-200 cursor-pointer"
                             title="Edit Laporan Pasien & Sisa Makanan"
                           >
                             <Pencil size={14} />
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeletePatient(pr.patientKey, pr.patientName)}
-                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-slate-200"
-                            title="Hapus Seluruh Data Pasien Ini"
+                            onClick={(e) => { e.stopPropagation(); handleDeletePatient(pr.patientName, pr.txIds, pr.patientKey); }}
+                            className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition border border-rose-200 cursor-pointer"
+                            title="Hapus Seluruh Data Laporan Pasien Ini"
                           >
                             <Trash2 size={14} />
                           </button>
                           <button
                             type="button"
-                            onClick={() => setSelectedTx(pr.sampleTx)}
-                            className="px-3 py-1.5 bg-emerald-600 text-white font-bold rounded-xl text-xs hover:bg-emerald-700 transition"
+                            onClick={(e) => { e.stopPropagation(); setSelectedTx(pr.sampleTx); }}
+                            className="px-3 py-1.5 bg-emerald-600 text-white font-bold rounded-xl text-xs hover:bg-emerald-700 transition cursor-pointer"
                           >
                             Detail
                           </button>
@@ -1820,7 +2067,7 @@ export default function Reports() {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
-                              onClick={() => setEditingSingleTx(t)}
+                              onClick={(e) => { e.stopPropagation(); setEditingSingleTx(t); }}
                               className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition border border-slate-200 cursor-pointer"
                               title="Edit Catatan Sisa Makanan Ini"
                             >
@@ -1828,7 +2075,7 @@ export default function Reports() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteSingleTx(t.id)}
+                              onClick={(e) => { e.stopPropagation(); handleDeleteSingleTx(t.id); }}
                               className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-slate-200 cursor-pointer"
                               title="Hapus Transaksi Ini"
                             >
@@ -2215,22 +2462,35 @@ export default function Reports() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 sticky bottom-0 bg-white py-2">
+              <div className="flex justify-between items-center gap-3 pt-4 border-t border-slate-200 sticky bottom-0 bg-white py-2">
                 <button
                   type="button"
-                  onClick={() => setEditingGroup(null)}
-                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 transition rounded-xl font-bold text-slate-600 text-xs cursor-pointer"
+                  onClick={() => {
+                    handleDeletePatient(editingGroup.patientName, editingGroup.items.map(i => i.id), editingGroup.key);
+                  }}
+                  className="px-4 py-2.5 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Hapus seluruh data laporan pasien ini"
                 >
-                  Batal
+                  <Trash2 size={14} />
+                  <span>Hapus Laporan Pasien Ini</span>
                 </button>
-                <button
-                  type="submit"
-                  disabled={savingGroup}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 transition rounded-xl font-bold text-white text-xs flex items-center gap-1.5 shadow cursor-pointer"
-                >
-                  <Save size={14} />
-                  <span>{savingGroup ? 'Menyimpan...' : 'Simpan Semua Perubahan'}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingGroup(null)}
+                    className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 transition rounded-xl font-bold text-slate-600 text-xs cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingGroup}
+                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 transition rounded-xl font-bold text-white text-xs flex items-center gap-1.5 shadow cursor-pointer"
+                  >
+                    <Save size={14} />
+                    <span>{savingGroup ? 'Menyimpan...' : 'Simpan Semua Perubahan'}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </motion.div>
